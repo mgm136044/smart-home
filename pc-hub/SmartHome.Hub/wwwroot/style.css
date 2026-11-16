@@ -1,0 +1,74 @@
+:root {
+  --bg: #f5f6f8; --card: #ffffff; --fg: #111827; --muted: #6b7280; --border: #e5e7eb;
+  --accent: #0284c7; --on: #059669; --off: #9ca3af; --bad: #dc2626; --temp: #ea580c; --hum: #0284c7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115; --card: #181b21; --fg: #f3f4f6; --muted: #9ca3af; --border: #2a2e36;
+    --accent: #38bdf8; --on: #34d399; --off: #6b7280; --bad: #f87171; --temp: #fb923c; --hum: #38bdf8;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0 auto; max-width: 720px;
+  padding: calc(16px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+}
+header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.02em; }
+h2 { font-size: 15px; margin: 0; }
+.link { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--off); flex: none; }
+.link.on .dot { background: var(--on); }
+.link.off .dot { background: var(--bad); }
+.ws { font-size: 12px; color: var(--bad); padding-top: 6px; }
+.ws.on { color: var(--muted); }
+
+.sensors { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+@media (max-width: 480px) { .sensors { grid-template-columns: repeat(2, 1fr); } }
+.tile, .card, .panel { background: var(--card); border: 1px solid var(--border); border-radius: 14px; }
+.tile { padding: 10px 12px; }
+.k { font-size: 12px; color: var(--muted); }
+.v { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.v small { font-size: 13px; color: var(--muted); margin-left: 2px; font-weight: 500; }
+
+.devices { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
+.card { padding: 14px; display: flex; flex-direction: column; gap: 10px; transition: opacity .15s; }
+.card.busy { opacity: .55; pointer-events: none; }
+.top { display: flex; justify-content: space-between; align-items: baseline; }
+.name { font-weight: 600; font-size: 16px; }
+.state { font-size: 13px; font-weight: 600; color: var(--off); }
+.state.on { color: var(--on); }
+.btns { display: flex; gap: 6px; }
+button {
+  flex: 1; min-width: 0; min-height: 44px; padding: 0 4px; white-space: nowrap;
+  border-radius: 10px; border: 1px solid var(--border);
+  background: transparent; color: var(--fg); font: inherit; font-weight: 600; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+button:active { transform: scale(0.97); }
+button.active { background: var(--accent); border-color: transparent; color: #fff; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+
+.panel { padding: 14px; margin-bottom: 12px; }
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.muted { color: var(--muted); font-size: 12px; }
+canvas { width: 100%; height: 170px; display: block; }
+
+#log { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+#log li { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
+#log li:first-child { border-top: 0; }
+#log .t { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+#log .bad { color: var(--bad); }
+#log:empty::after { content: "아직 기록이 없어요"; color: var(--muted); }
+
+#toast {
+  position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom));
+  transform: translateX(-50%) translateY(16px); opacity: 0; pointer-events: none;
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 999px;
+  font-size: 14px; white-space: nowrap; transition: opacity .2s, transform .2s;
+}
+#toast.show { opacity: 1; transform: translateX(-50%); }
+#toast.bad { background: var(--bad); color: #fff; }

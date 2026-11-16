@@ -1,0 +1,200 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>스마트홈 소프트웨어 아키텍처</title>
+<style>
+:root{color-scheme:light;--foreground:#171717;--muted-foreground:rgba(23,23,23,.55);--surface-primary:rgba(23,23,23,.04);--border:rgba(23,23,23,.14);--chart-1:#0284c7;--chart-3:#d97706;--success:#059669;--font-sans:"Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;--bg:#ffffff}
+@media (prefers-color-scheme: dark){:root{color-scheme:dark;--foreground:#fafafa;--muted-foreground:rgba(250,250,250,.55);--surface-primary:rgba(250,250,250,.08);--border:rgba(250,250,250,.12);--chart-1:#38bdf8;--chart-3:#fbbf24;--success:#34d399;--bg:#171717}}
+html{background:var(--bg);color:var(--foreground);font:14px/1.5 var(--font-sans)}
+body{margin:32px auto;max-width:860px;padding:0 20px}
+.doc-title{font-size:22px;font-weight:600;letter-spacing:-0.02em;margin:0 0 4px}
+.doc-sub{font-size:12px;color:var(--muted-foreground);margin:0 0 20px}
+svg{display:block;width:100%;overflow:visible}
+.node{cursor:pointer;transition:opacity .2s}
+.node rect.box{fill:var(--surface-primary);stroke:var(--border);stroke-width:1}
+.node .t{font-size:13px;font-weight:600;fill:var(--foreground)}
+.node .s{font-size:11px;fill:var(--muted-foreground)}
+.node.sel rect.box{stroke:var(--chart-1);stroke-width:1.5}
+.house rect{fill:none;stroke:var(--border);stroke-width:1;stroke-dasharray:2 3}
+.house text{font-size:11px;fill:var(--muted-foreground)}
+.edge{transition:opacity .2s}
+.edge path{fill:none;stroke:var(--muted-foreground);stroke-opacity:.55;stroke-width:1.4}
+.edge.wl path{stroke-dasharray:4 4}
+.edge.on path{stroke:var(--chart-1);stroke-opacity:1}
+.edge.on.wl path{animation:flow 1s linear infinite}
+.edge text{font-size:10.5px;fill:var(--muted-foreground)}
+.edge.on text{fill:var(--foreground)}
+.dim{opacity:.3}
+@keyframes flow{to{stroke-dashoffset:-8}}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--muted-foreground);margin:0 0 12px}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px}
+.legend svg{display:inline-block;width:22px;height:8px;margin-right:6px;vertical-align:0}
+.panel{margin-top:16px;padding-top:12px;border-top:1px solid var(--border)}
+.panel h3{margin:0 0 2px;font-size:15px;font-weight:600;letter-spacing:-0.01em}
+.panel .who{font-size:11px;color:var(--muted-foreground);margin-bottom:8px}
+.row{display:grid;grid-template-columns:64px 1fr;gap:8px;font-size:12.5px;padding:3px 0}
+.k{color:var(--muted-foreground);font-size:11.5px;padding-top:1px}
+.hint{font-size:11px;color:var(--muted-foreground);margin-top:8px}
+section{margin-top:28px;padding-top:16px;border-top:1px solid var(--border)}
+section h2{font-size:16px;font-weight:600;letter-spacing:-0.01em;margin:0 0 4px}
+section .lead{font-size:12px;color:var(--muted-foreground);margin:0 0 12px}
+.cmp{display:grid;grid-template-columns:minmax(90px,130px) 1fr minmax(70px,110px);font-size:12.5px}
+.cmp > div{padding:8px 8px 8px 0;border-bottom:1px solid var(--border)}
+.cmp .h{font-size:11px;color:var(--muted-foreground);padding-top:0}
+.cmp .pick{color:var(--success);font-weight:600}
+.cmp .sub{display:block;color:var(--muted-foreground);font-size:11.5px}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.step{background:var(--surface-primary);border-radius:10px;padding:12px 14px}
+.step .n{font-size:11px;color:var(--chart-1);font-weight:600}
+.step h4{margin:2px 0 6px;font-size:13.5px;font-weight:600}
+.step ul{margin:0;padding-left:16px;font-size:12.5px}
+.step li{margin:2px 0}
+code{font-family:Consolas,Menlo,monospace;font-size:11.5px}
+</style>
+</head>
+<body>
+<h1 class="doc-title">스마트홈 소프트웨어 아키텍처</h1>
+<p class="doc-sub">텀프로젝트 · SW 민경민 / HW 소석환, 박상원 · 2026-11-16 수정: PC 허브 ↔ ESP32 무선(Wi-Fi TCP), USB 시리얼은 백업</p>
+<div class="legend">
+  <span><i style="background:var(--chart-1)"></i>SW팀</span>
+  <span><i style="background:var(--chart-3)"></i>HW팀</span>
+  <span><i style="background:var(--muted-foreground)"></i>외부 서비스</span>
+  <span><svg viewBox="0 0 22 8"><line x1="0" y1="4" x2="22" y2="4" stroke="currentColor" stroke-width="1.4" stroke-dasharray="4 4"/></svg>무선 (같은 2.4GHz 공유기)</span>
+  <span><svg viewBox="0 0 22 8"><line x1="0" y1="4" x2="22" y2="4" stroke="currentColor" stroke-width="1.4"/></svg>유선</span>
+</div>
+<div id="wrap"><svg id="g"></svg></div>
+<div class="panel" id="panel"></div>
+<div class="hint">노드를 누르면 연결과 담당 업무가 보여요.</div>
+
+<section>
+  <h2>PC ↔ ESP32 연결 방식</h2>
+  <p class="lead">줄 단위 프로토콜(@id,장치,동작 / #ACK...)은 그대로 두고, 전달 통로만 바꿔 끼우는 구조(ITransport)예요.</p>
+  <div class="cmp">
+    <div class="h">방식</div><div class="h">장점 / 단점</div><div class="h">판단</div>
+    <div>TCP 소켓<span class="sub">ESP32 → PC:5001</span></div><div>프로토콜 그대로, 코드 짧고 지연 낮음<span class="sub">재접속·하트비트는 직접 구현</span></div><div class="pick">채택</div>
+    <div>USB 시리얼</div><div>가장 안정적, 디버깅 쉬움<span class="sub">선이 필요함</span></div><div>백업·디버그</div>
+    <div>WebSocket</div><div>웹 포트 5000 하나로 통일<span class="sub">ESP32 라이브러리 추가, 조금 복잡</span></div><div>대안</div>
+    <div>MQTT</div><div>장치가 늘어도 확장 쉬움<span class="sub">브로커(Mosquitto)를 하나 더 운영</span></div><div>이번 규모엔 과함</div>
+    <div>BLE</div><div>공유기 없이 연결<span class="sub">WinForms에서 다루기 까다로움</span></div><div>비추천</div>
+  </div>
+</section>
+
+<section>
+  <h2>초기 설정 순서</h2>
+  <p class="lead">IP는 예시예요. 공유기 대역에 맞춰 바꾸면 돼요.</p>
+  <div class="steps">
+    <div class="step"><div class="n">1</div><h4>네트워크</h4><ul>
+      <li>데모용 공유기 하나, 2.4GHz 켜기, WPA2-PSK(AES)</li>
+      <li>아이폰 핫스팟이면 '호환성 최대화' 켜기</li>
+      <li>DHCP 예약: PC <code>.10</code>, 라즈베리파이 <code>.11</code>, ESP32 <code>.20</code></li></ul></div>
+    <div class="step"><div class="n">2</div><h4>PC 허브</h4><ul>
+      <li>네트워크 프로필을 '개인'으로</li>
+      <li>방화벽 인바운드 TCP 5000(웹), 5001(ESP32) 허용</li>
+      <li>설정 파일: <code>Transport=Tcp</code>, 백업 COM 포트</li></ul></div>
+    <div class="step"><div class="n">3</div><h4>ESP32</h4><ul>
+      <li>첫 업로드만 USB (WiFiManager + OTA 포함)</li>
+      <li>폰으로 <code>SmartHome-Setup</code> AP 접속 → SSID, 비번, PC IP 입력</li>
+      <li>이후 펌웨어는 OTA(무선)로 업로드</li>
+      <li>아날로그 입력은 ADC1 핀(GPIO32~39), 5V 어댑터 따로</li></ul></div>
+    <div class="step"><div class="n">4</div><h4>라즈베리파이 · 휴대폰</h4><ul>
+      <li>같은 공유기에 접속</li>
+      <li>라즈베리파이 설정 파일에 <code>http://PC-IP:5000</code></li>
+      <li>폰/아이패드는 같은 주소 열고 홈 화면에 추가</li></ul></div>
+    <div class="step"><div class="n">5</div><h4>연결 확인</h4><ul>
+      <li>허브 화면에 ESP32 '온라인', 센서값 1초마다 갱신</li>
+      <li>폰에서 팬 ON → ACK와 지연(ms) 확인</li>
+      <li>공유기를 껐다 켜서 자동 재접속 확인</li>
+      <li>Wi-Fi를 끊고 USB 백업으로 전환되는지 확인</li></ul></div>
+  </div>
+</section>
+
+<script>
+const N = {
+  phone: { t: '휴대폰 / 아이패드', s: ['웹 대시보드'], team: 'sw', who: 'SW · 민경민',
+    rows: [['기술','HTML/JS (PC 허브가 서빙), canvas 그래프, WebSocket'],['기능','장치 버튼, 실시간 센서값, 자동/수동 모드, 브리핑 화면'],['접속','같은 공유기에서 http://PC-IP:5000, 홈 화면에 추가']] },
+  rpi: { t: '라즈베리파이 4', s: ['MediaPipe 제스처'], team: 'sw', who: 'SW · 민경민',
+    rows: [['기술','Python venv, mediapipe Tasks API, OpenCV'],['기능','제스처 인식 → 상태머신 → 허브 REST로 명령 전송, 브리핑 음성'],['포인트','mp.solutions 금지, 64비트 OS, 방열 필수']] },
+  ext: { t: '외부 API', s: ['구글 캘린더 · 기상청'], team: 'ext', who: '외부 서비스',
+    rows: [['캘린더','iCal 비밀 주소(간단) 또는 OAuth Calendar API'],['날씨','공공데이터포털 기상청 단기예보 (무료, 자동승인)'],['TTS','edge-tts(온라인) 또는 Piper(오프라인)']] },
+  hub: { t: 'PC 허브', s: ['C# WinForms + Kestrel'], x: ['웹 :5000 · ESP32 TCP :5001', 'SQLite · 그래프 · 자동화'], team: 'sw', who: 'SW · 민경민',
+    rows: [['기술','.NET 10 WinForms, ASP.NET Core 내장, TcpListener, System.IO.Ports, SQLite, ScottPlot'],['통신','ITransport 하나로 TCP(기본)와 USB 시리얼(백업) 전환'],['포인트','모든 명령이 같은 CommandService를 거침, 고정 IP와 방화벽 5000/5001 허용']] },
+  esp: { t: 'ESP32', s: ['Wi-Fi 게이트웨이'], team: 'hw', who: 'HW 펌웨어 · 규격은 SW가 정의',
+    rows: [['역할','PC와 TCP로 줄 프로토콜 송수신, Arduino 중계'],['연결','TCP 클라이언트 → PC:5001, 끊기면 3초마다 재접속, USB 시리얼은 백업과 디버그'],['포인트','2.4GHz만, ADC2 핀 사용 불가, WiFi.setSleep(false), 5V 전원 따로'],['설정','WiFiManager 포털로 SSID와 PC IP 입력, 이후 OTA 업로드']] },
+  ard: { t: 'Arduino', s: ['센서 · 액추에이터 제어'], team: 'hw', who: 'HW 펌웨어',
+    rows: [['역할','센서 읽기, 모터·릴레이 구동, 리밋/안전 로직'],['연결','ESP32와 UART (3.3V/5V 레벨 변환 확인)'],['포인트','명령은 ON/OFF/SET 같은 절대값으로만 받기']] },
+  dev: { t: '센서 / 액추에이터', s: ['입력 · 온습도 · 조도 · 적외선', '출력 · 팬 · 서보 · 스텝 · 릴레이'], team: 'hw', who: 'HW 배선',
+    rows: [['입력','온습도, 조도, 적외선'],['출력','팬(5V), 서보(문), 스텝(커튼), 릴레이(전등)'],['포인트','커튼 위치(0~100%) 원점 잡는 방법 확인, 모터 전원은 따로']] }
+};
+const teamColor = { sw: 'var(--chart-1)', hw: 'var(--chart-3)', ext: 'var(--muted-foreground)' };
+const HOUSE = '하우스 모형 안 · 5V 어댑터 전원';
+let sel = 'esp', lastW = 0;
+function L(W) {
+  if (W >= 700) {
+    const lw = 150, hw = 168, rw = 200, pad = 12;
+    const cx = W - rw - pad * 2, nx = cx + pad, hx = lw + (cx - lw - hw) / 2, mid = nx + rw / 2;
+    return { H: 358, house: [cx, 0, rw + pad * 2, 356, nx, 19, 'start'], n: {
+      ext: [0, 30, lw, 58], rpi: [0, 150, lw, 58], phone: [0, 270, lw, 58],
+      hub: [hx, 140, hw, 110], esp: [nx, 30, rw, 58], ard: [nx, 150, rw, 58], dev: [nx, 272, rw, 72] },
+      e: [
+        ['ext','rpi',[lw/2,88],[lw/2,150],['HTTPS'],'v',1],
+        ['rpi','hub',[lw,179],[hx,175],['Wi-Fi','REST'],'up',1],
+        ['phone','hub',[lw,299],[hx,225],['Wi-Fi','REST + WebSocket'],'down',1],
+        ['hub','esp',[hx+hw,165],[nx,59],['Wi-Fi TCP','(USB 백업)'],'up',1],
+        ['esp','ard',[mid,88],[mid,150],['UART'],'v',0],
+        ['ard','dev',[mid,208],[mid,272],['GPIO'],'v',0] ] };
+  }
+  const h2 = (W - 16) / 2, h3 = (W - 24 - 40) / 2;
+  return { H: 616, house: [0, 384, W, 230, W - 12, 403, 'end'], n: {
+    ext: [h2 + 16, 0, h2, 58], phone: [0, 112, h2, 58], rpi: [h2 + 16, 112, h2, 58],
+    hub: [0, 232, W, 96], esp: [12, 414, h3, 58], ard: [12 + h3 + 40, 414, h3, 58], dev: [12, 530, W - 24, 72] },
+    e: [
+      ['ext','rpi',[h2+16+h2/2,58],[h2+16+h2/2,112],['HTTPS'],'v',1],
+      ['phone','hub',[h2/2,170],[h2/2,232],['Wi-Fi · REST + WebSocket'],'v',1],
+      ['rpi','hub',[h2+16+h2/2,170],[h2+16+h2/2,232],['Wi-Fi · REST'],'v',1],
+      ['hub','esp',[12+h3/2,328],[12+h3/2,414],['Wi-Fi TCP (USB 백업)'],'v',1],
+      ['esp','ard',[12+h3,443],[12+h3+40,443],['UART'],'up',0],
+      ['ard','dev',[12+h3+40+h3/2,472],[12+h3+40+h3/2,530],['GPIO'],'v',0] ] };
+}
+function draw() {
+  const svg = document.getElementById('g');
+  const W = Math.round(svg.parentElement.clientWidth || 700);
+  const lay = L(W);
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + lay.H);
+  svg.setAttribute('height', lay.H);
+  const linked = new Set([sel]);
+  lay.e.forEach(([a,b]) => { if (a === sel) linked.add(b); if (b === sel) linked.add(a); });
+  const hs = lay.house;
+  let out = '<g class="house"><rect x="' + hs[0] + '" y="' + hs[1] + '" width="' + hs[2] + '" height="' + hs[3] + '" rx="14"/><text x="' + hs[4] + '" y="' + hs[5] + '" text-anchor="' + hs[6] + '">' + HOUSE + '</text></g>';
+  for (const [a,b,p1,p2,label,mode,wl] of lay.e) {
+    let d;
+    if (mode === 'v') { const my = (p1[1]+p2[1])/2; d = 'M'+p1[0]+','+p1[1]+' C'+p1[0]+','+my+' '+p2[0]+','+my+' '+p2[0]+','+p2[1]; }
+    else { const mx = (p1[0]+p2[0])/2; d = 'M'+p1[0]+','+p1[1]+' C'+mx+','+p1[1]+' '+mx+','+p2[1]+' '+p2[0]+','+p2[1]; }
+    const on = a === sel || b === sel;
+    const mx = (p1[0]+p2[0])/2, my = (p1[1]+p2[1])/2;
+    let txt;
+    if (mode === 'v') txt = label.map((s,i) => '<text x="' + (mx + 8) + '" y="' + (my + 4 + i*13) + '">' + s + '</text>').join('');
+    else if (mode === 'up') txt = label.map((s,i) => '<text text-anchor="middle" x="' + mx + '" y="' + (my - 10 - (label.length-1-i)*13) + '">' + s + '</text>').join('');
+    else txt = label.map((s,i) => '<text text-anchor="middle" x="' + mx + '" y="' + (my + 20 + i*13) + '">' + s + '</text>').join('');
+    out += '<g class="edge' + (wl ? ' wl' : '') + (on ? ' on' : ' dim') + '"><path d="' + d + '"/>' + txt + '</g>';
+  }
+  for (const [k, r] of Object.entries(lay.n)) {
+    const n = N[k]; const [x,y,w,h] = r;
+    let body = n.s.map((s,i) => '<text class="s" x="' + (x+12) + '" y="' + (y+42+i*15) + '">' + s + '</text>').join('');
+    if (n.x && h >= 90) body += n.x.map((s,i) => '<text class="s" x="' + (x+12) + '" y="' + (y+66+i*15) + '">' + s + '</text>').join('');
+    out += '<g class="node' + (k === sel ? ' sel' : '') + (linked.has(k) ? '' : ' dim') + '" data-k="' + k + '">' +
+      '<rect class="box" x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="10"/>' +
+      '<rect x="' + (x+12) + '" y="' + (y+15) + '" width="6" height="6" rx="1.5" style="fill:' + teamColor[n.team] + '"/>' +
+      '<text class="t" x="' + (x+24) + '" y="' + (y+23) + '">' + n.t + '</text>' + body + '</g>';
+  }
+  svg.innerHTML = out;
+  svg.querySelectorAll('.node').forEach(el => el.addEventListener('click', () => { sel = el.dataset.k; draw(); }));
+  const n = N[sel];
+  document.getElementById('panel').innerHTML = '<h3>' + n.t + '</h3><div class="who">' + n.who + '</div>' +
+    n.rows.map(r => '<div class="row"><div class="k">' + r[0] + '</div><div>' + r[1] + '</div></div>').join('');
+}
+new ResizeObserver(() => { const w = Math.round(document.getElementById('wrap').clientWidth); if (w !== lastW) { lastW = w; requestAnimationFrame(draw); } }).observe(document.getElementById('wrap'));
+draw();
+</script>
+</body>
+</html>

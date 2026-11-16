@@ -1,0 +1,91 @@
+# 스마트홈 텀프로젝트 (SW)
+
+손동작(MediaPipe)과 휴대폰으로 팬, 전등, 커튼, 문을 제어하는 스마트홈의 소프트웨어예요.
+
+- 구현 계획: `docs/plan.md`
+- 구조도: `docs/architecture.html` (브라우저로 열기)
+- 통신 규격: `docs/protocol.md`
+
+## 폴더 구조
+
+```text
+smart-home/
+├─ SmartHome.slnx              Visual Studio 솔루션
+├─ docs/                       계획, 구조도, 통신 규격
+├─ pc-hub/SmartHome.Hub/       PC 허브 (C# .NET 10 WinForms + 내장 웹 서버)
+│  ├─ Core/        Protocol(줄 프로토콜), HomeState(상태 저장소), CommandService(명령/ACK), HubLog, DeviceSimulator
+│  ├─ Transport/   ITransport, TcpTransport(Wi-Fi), SerialTransport(USB), FakeTransport(가상 장치), TransportRouter
+│  ├─ Web/         WebServer (REST + WebSocket + 정적 파일)
+│  ├─ UI/          MainForm (장치 제어, 센서, 그래프, 로그)
+│  ├─ wwwroot/     휴대폰/아이패드 대시보드 (HTML/CSS/JS, 라이브러리 없음)
+│  └─ hubsettings.json
+└─ tools/Esp32Sim/             ESP32 시뮬레이터 (실제 ESP32처럼 Wi-Fi TCP로 접속)
+```
+
+## 지금 되는 것 (2026-11-16)
+
+- 휴대폰/아이패드 대시보드 → PC 허브 → ESP32(또는 가상 장치) → ACK → 결과 표시 (시나리오 1~7)
+- Wi-Fi TCP 접속, 토큰 확인, 5초 하트비트, 6초 무응답 감지, 자동 재접속 대기
+- USB 시리얼 백업 (설정에 COM 포트를 넣으면 동작, 3초마다 재연결)
+- 통로 자동 전환: Wi-Fi TCP → USB → 가상 장치
+- 명령 번호 + ACK 매칭, 2초 타임아웃 + 1회 재시도, 토글을 절대값으로 변환
+- 모든 화면 실시간 동기화 (WebSocket), WinForms 온습도 그래프(ScottPlot), 통신 로그(파일 포함)
+
+## 실행 방법
+
+### Visual Studio 2026
+1. `SmartHome.slnx` 열기
+2. 시작 프로젝트를 `SmartHome.Hub`로 지정하고 F5
+3. 처음 실행하면 Windows 방화벽 창이 떠요 → **개인 네트워크** 허용 (휴대폰 접속용)
+
+### 명령줄
+```powershell
+dotnet run --project pc-hub/SmartHome.Hub                 # 기본 (가상 장치 켜짐)
+dotnet run --project pc-hub/SmartHome.Hub -- --local      # 이 PC에서만 접속 (방화벽 창 안 뜸)
+dotnet run --project pc-hub/SmartHome.Hub -- --no-fake    # 가상 장치 끄기 (실제 ESP32만)
+dotnet run --project pc-hub/SmartHome.Hub -- --headless   # 창 없이 서버만
+```
+
+### 하드웨어 없이 테스트
+- **가상 장치**: 기본으로 켜져 있어요. 허브만 실행하면 바로 버튼이 동작해요. 팬을 켜면 가상 온습도가 내려가요.
+- **ESP32 시뮬레이터**: 실제 ESP32처럼 Wi-Fi TCP로 접속해요. 접속하면 허브가 자동으로 가상 장치 대신 이쪽을 써요.
+  ```powershell
+  dotnet run --project tools/Esp32Sim                         # 127.0.0.1:5001
+  dotnet run --project tools/Esp32Sim -- --host 192.168.0.10  # 다른 PC의 허브
+  dotnet run --project tools/Esp32Sim -- --mute               # ACK 안 보냄 (타임아웃 테스트)
+  dotnet run --project tools/Esp32Sim -- --token wrong        # 인증 실패 테스트
+  ```
+
+### 휴대폰/아이패드에서 접속
+1. PC와 휴대폰을 같은 공유기(Wi-Fi)에 연결
+2. 허브 창 위쪽에 나오는 주소(예: `http://192.168.0.10:5000`)를 휴대폰 브라우저로 열기
+3. 공유 → 홈 화면에 추가 (앱처럼 전체 화면으로 열려요)
+
+안 열리면: 방화벽에서 5000, 5001 포트 허용 (관리자 PowerShell)
+```powershell
+Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private
+New-NetFirewallRule -DisplayName "SmartHome Hub" -Direction Inbound -Protocol TCP -LocalPort 5000,5001 -Action Allow -Profile Private
+```
+
+## 설정 (`hubsettings.json`)
+
+| 키 | 기본값 | 설명 |
+|---|---|---|
+| WebPort | 5000 | 대시보드/REST 포트 |
+| TcpPort | 5001 | ESP32 접속 포트 |
+| ListenAddress | 0.0.0.0 | 127.0.0.1이면 이 PC만 |
+| Token | change-me | ESP32 펌웨어 TOKEN과 같아야 함 |
+| SerialPort | (빈칸) | USB 백업 포트, 예: COM4 |
+| SerialBaud | 115200 | |
+| UseFakeDevice | true | 가상 장치 사용 |
+| CommandTimeoutMs | 2000 | ACK 대기 시간 |
+| CommandRetries | 1 | 재시도 횟수 |
+
+개인 설정은 `hubsettings.local.json`으로 복사해서 쓰면 깃에 안 올라가요(.gitignore).
+
+## 다음 할 일
+
+1. ESP32 펌웨어 통신부 (WiFiManager + TCP + 줄 프로토콜 + Arduino 중계)
+2. 라즈베리파이 제스처 앱 (Python, MediaPipe Tasks API) → `POST /api/devices/...` (`X-Source: gesture`)
+3. 자동화 규칙 (온습도 → 팬, 조도 → 커튼/전등, 수동 우선 10분)
+4. 센서 기록 SQLite 저장, 브리핑(기상청 + 캘린더 + TTS)

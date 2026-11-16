@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+*.user
+logs/
+hubsettings.local.json
+__pycache__/
+.venv/

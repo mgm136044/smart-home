@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/pc-hub/">
+    <Project Path="pc-hub/SmartHome.Hub/SmartHome.Hub.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Esp32Sim/Esp32Sim.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,24 @@
+{
+  // 웹 대시보드 포트 (휴대폰/아이패드에서 http://PC-IP:5000)
+  "WebPort": 5000,
+
+  // ESP32가 Wi-Fi로 접속해 오는 포트
+  "TcpPort": 5001,
+
+  // 0.0.0.0 = 같은 공유기의 다른 기기도 접속 가능 / 127.0.0.1 = 이 PC에서만
+  "ListenAddress": "0.0.0.0",
+
+  // ESP32 펌웨어의 TOKEN과 같아야 접속돼요
+  "Token": "change-me",
+
+  // USB 시리얼 백업 포트 (예: "COM4"). 비워두면 USB 백업을 쓰지 않아요
+  "SerialPort": "",
+  "SerialBaud": 115200,
+
+  // 실제 ESP32가 없을 때 가상 장치로 테스트 (실제 ESP32가 접속하면 자동으로 그쪽을 우선 사용)
+  "UseFakeDevice": true,
+
+  // 명령 응답(ACK) 대기 시간과 재시도 횟수
+  "CommandTimeoutMs": 2000,
+  "CommandRetries": 1
+}
