@@ -6,3 +6,7 @@ logs/
 hubsettings.local.json
 __pycache__/
 .venv/
+*.task
+rpi/gesture/models/
+rpi/gesture/tests/data/
+rpi/gesture/config.local.toml

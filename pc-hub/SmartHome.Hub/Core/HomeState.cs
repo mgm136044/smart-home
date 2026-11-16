@@ -4,6 +4,9 @@ namespace SmartHome.Hub.Core;
 
 public sealed record SensorSample(DateTime Time, double Temp, double Hum, double Lux, int Ir);
 
+/// <summary>ESP32가 알려주는 상태: Wi-Fi 신호 세기(dBm), Arduino 응답 여부, 부팅 후 시간(초)</summary>
+public sealed record EspStatus(int? Rssi, bool Arduino, long Uptime, bool Simulated);
+
 public sealed record HomeSnapshot(
     bool Fan,
     bool Light,
@@ -11,7 +14,8 @@ public sealed record HomeSnapshot(
     bool Door,
     SensorSample? Sensors,
     bool Connected,
-    string Link);
+    string Link,
+    EspStatus? Esp);
 
 /// <summary>장치·센서 상태의 단일 저장소. WinForms, 웹 대시보드, 라즈베리파이 모두 여기 값을 봐요.</summary>
 public sealed class HomeState
@@ -25,6 +29,7 @@ public sealed class HomeState
     SensorSample? _last;
     bool _connected;
     string _link = "오프라인";
+    EspStatus? _esp;
 
     /// <summary>장치 상태나 연결 상태가 바뀌었을 때</summary>
     public event Action<HomeSnapshot>? Changed;
@@ -34,7 +39,7 @@ public sealed class HomeState
 
     public HomeSnapshot Snapshot()
     {
-        lock (_gate) return new HomeSnapshot(_fan, _light, _curtain, _door, _last, _connected, _link);
+        lock (_gate) return new HomeSnapshot(_fan, _light, _curtain, _door, _last, _connected, _link, _esp);
     }
 
     public IReadOnlyList<SensorSample> History(DateTime since)
@@ -84,10 +89,36 @@ public sealed class HomeState
         lock (_gate)
         {
             if (_connected == connected && _link == link) return;
+            if (_link != link) _esp = null; // 통로가 바뀌면 이전 ESP32 상태는 버려요
             _connected = connected;
             _link = link;
         }
         Changed?.Invoke(Snapshot());
+    }
+
+    /// <returns>Arduino 응답 여부가 바뀌었으면 새 값, 아니면 null</returns>
+    public bool? ApplyStatus(StatusMessage msg)
+    {
+        bool notify;
+        bool? arduinoChanged = null;
+        lock (_gate)
+        {
+            var v = msg.Values;
+            int? rssi = v.TryGetValue("RSSI", out var r) && int.TryParse(r, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rv) ? rv : null;
+            var arduino = !v.TryGetValue("ARDUINO", out var a) || IsOn(a); // 키가 없으면 정상으로 봐요
+            var up = v.TryGetValue("UP", out var u) && long.TryParse(u, NumberStyles.Integer, CultureInfo.InvariantCulture, out var uv) ? uv : 0;
+            var sim = v.TryGetValue("SIM", out var s) && IsOn(s);
+            var next = new EspStatus(rssi, arduino, up, sim);
+
+            // 처음 받은 상태는 '정상'에서 바뀐 것으로 봐요 (처음부터 Arduino가 없으면 경고)
+            if ((_esp?.Arduino ?? true) != arduino) arduinoChanged = arduino;
+            // 신호는 5dBm 이상 바뀔 때만 화면에 알려요 (2초마다 오니까)
+            notify = _esp is null || _esp.Arduino != arduino || _esp.Simulated != sim
+                     || Math.Abs((_esp.Rssi ?? 0) - (rssi ?? 0)) >= 5;
+            _esp = next;
+        }
+        if (notify) Changed?.Invoke(Snapshot());
+        return arduinoChanged;
     }
 
     // FAN=1 / FAN=ON / CURTAIN=70 / DOOR=OPEN 형식을 모두 처리

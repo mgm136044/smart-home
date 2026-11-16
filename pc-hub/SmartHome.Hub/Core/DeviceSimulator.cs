@@ -60,6 +60,14 @@ public sealed class DeviceSimulator
         }
     }
 
+    /// <summary>ESP32가 2초마다 보내는 상태 줄 흉내 (신호 세기는 -45~-60dBm 사이에서 흔들려요)</summary>
+    public string StatusLine(TimeSpan uptime, bool arduino = true)
+    {
+        lock (_gate)
+            return string.Create(CultureInfo.InvariantCulture,
+                $"#STATUS,ARDUINO={B(arduino)},RSSI={_rnd.Next(-60, -44)},UP={(long)uptime.TotalSeconds}");
+    }
+
     string StateOf(string device) => device switch
     {
         Devices.Fan => _fan ? "ON" : "OFF",

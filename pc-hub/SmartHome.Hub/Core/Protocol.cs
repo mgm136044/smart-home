@@ -34,6 +34,9 @@ public sealed record StateMessage(IReadOnlyDictionary<string, string> Values) : 
 public sealed record EvtMessage(string Source, string Event) : DeviceMessage;
 public sealed record HelloMessage(string DeviceId, string Token) : DeviceMessage;
 
+/// <summary>ESP32 상태 (2초마다): <c>#STATUS,ARDUINO=1,RSSI=-55,UP=123</c></summary>
+public sealed record StatusMessage(IReadOnlyDictionary<string, string> Values) : DeviceMessage;
+
 /// <summary>
 /// 줄 단위 프로토콜. 한 줄에 메시지 하나, '\n'으로 끝나요. TCP와 USB 시리얼이 똑같이 써요.
 /// 자세한 규격은 docs/protocol.md 참고.
@@ -44,6 +47,9 @@ public static class Protocol
     public const string Ping = "@0,PING";
 
     static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+    /// <summary>"//"로 시작하는 줄은 펌웨어 디버그 출력이라 무시해요 (USB 시리얼로 같이 들어와요).</summary>
+    public static bool IsComment(string? line) => line is not null && line.TrimStart().StartsWith("//", StringComparison.Ordinal);
 
     public static string Command(int id, string device, string action, int? value = null) =>
         value is null
@@ -96,6 +102,9 @@ public static class Protocol
 
             case "HELLO" when p.Length >= 3:
                 return new HelloMessage(p[1].Trim(), p[2].Trim());
+
+            case "STATUS":
+                return new StatusMessage(Pairs(p).ToDictionary(x => x.Key, x => x.Value));
 
             default:
                 return null;

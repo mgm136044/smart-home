@@ -29,10 +29,25 @@ public sealed class SerialTransport : ITransport
     public event Action<string>? LineReceived;
     public event Action? ConnectionChanged;
 
-    public async Task RunAsync(CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(_portName)) return;
+    public Task RunAsync(CancellationToken ct) =>
+        string.IsNullOrWhiteSpace(_portName)
+            ? Task.CompletedTask // 설정에 포트가 없으면 USB 백업 사용 안 함
+            : Task.WhenAll(ConnectLoopAsync(ct), HeartbeatLoopAsync(ct));
 
+    /// <summary>TCP와 같이 5초마다 PING (ESP32가 USB 쪽에도 상태를 다시 보내게)</summary>
+    async Task HeartbeatLoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        while (await timer.WaitForNextTickAsync(ct))
+        {
+            if (!IsConnected) continue;
+            try { await SendLineAsync(Protocol.Ping, ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { }
+        }
+    }
+
+    async Task ConnectLoopAsync(CancellationToken ct)
+    {
         var warned = false;
         while (!ct.IsCancellationRequested)
         {

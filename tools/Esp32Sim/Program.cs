@@ -1,12 +1,14 @@
-// ESP32 시뮬레이터: 실제 ESP32처럼 허브(PC:5001)에 Wi-Fi TCP로 접속해서
-// HELLO → 명령에 ACK → 1초마다 센서값 → PING에 STATE 로 응답해요.
+// ESP32 시뮬레이터: 실제 ESP32 펌웨어처럼 허브(PC:5001)에 Wi-Fi TCP로 접속해서
+// HELLO → 명령에 ACK → 1초마다 센서값 → 2초마다 STATUS → PING에 STATE 로 응답해요.
 //
 // 사용법:
 //   dotnet run --project tools/Esp32Sim -- [--host 127.0.0.1] [--port 5001] [--token change-me]
-//                                         [--id esp32-sim] [--delay 30] [--mute] [--verbose]
-//   --mute     명령에 ACK를 안 보냄 (허브의 타임아웃/재시도 테스트용)
-//   --verbose  센서값, PING까지 전부 출력
+//                                         [--id esp32-sim] [--delay 30] [--mute] [--no-arduino] [--verbose]
+//   --mute        명령에 ACK를 안 보냄 (허브의 타임아웃/재시도 테스트용)
+//   --no-arduino  Arduino가 빠진 상황 흉내: 센서값 없음, 명령에 #ERR,...,NO_ARDUINO
+//   --verbose     센서값, STATUS, PING까지 전부 출력
 
+using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text;
 using SmartHome.Hub.Core;
@@ -25,10 +27,13 @@ var token = Arg("--token", "change-me");
 var deviceId = Arg("--id", "esp32-sim");
 var delayMs = int.Parse(Arg("--delay", "30"));
 var mute = args.Contains("--mute");
+var noArduino = args.Contains("--no-arduino");
 var verbose = args.Contains("--verbose");
 var sim = new DeviceSimulator();
+var uptime = Stopwatch.StartNew();
 
-Console.WriteLine($"ESP32 시뮬레이터 · {host}:{port} 에 접속해요 (Ctrl+C로 종료){(mute ? " · ACK 안 보냄" : "")}");
+Console.WriteLine($"ESP32 시뮬레이터 · {host}:{port} 에 접속해요 (Ctrl+C로 종료)"
+    + (mute ? " · ACK 안 보냄" : "") + (noArduino ? " · Arduino 없음" : ""));
 
 while (true)
 {
@@ -46,19 +51,25 @@ while (true)
             await sendLock.WaitAsync();
             try { await writer.WriteLineAsync(line); }
             finally { sendLock.Release(); }
-            if (verbose || !(line.StartsWith("#SENS") || line.StartsWith("#STATE"))) Console.WriteLine($"→ {line}");
+            var quiet = line.StartsWith("#SENS") || line.StartsWith("#STATE") || line.StartsWith("#STATUS");
+            if (verbose || !quiet) Console.WriteLine($"→ {line}");
         }
 
         await Send($"#HELLO,{deviceId},{token}");
         Console.WriteLine("허브에 접속했어요.");
 
         using var stop = new CancellationTokenSource();
-        var sensorTask = Task.Run(async () =>
+        var background = Task.Run(async () =>
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            var tick = 0;
             try
             {
-                while (await timer.WaitForNextTickAsync(stop.Token)) await Send(sim.NextSensorLine());
+                while (await timer.WaitForNextTickAsync(stop.Token))
+                {
+                    if (!noArduino) await Send(sim.NextSensorLine());
+                    if (++tick % 2 == 0) await Send(sim.StatusLine(uptime.Elapsed, arduino: !noArduino));
+                }
             }
             catch (Exception) { /* 연결이 끊기면 종료 */ }
         });
@@ -69,12 +80,21 @@ while (true)
             var isPing = line == Protocol.Ping;
             if (verbose || !isPing) Console.WriteLine($"← {line}");
             if (mute && !isPing) continue;
+
+            if (noArduino)
+            {
+                // 실제 펌웨어처럼: Arduino가 없으면 바로 ERR (PING에는 응답 없음, STATUS가 생존 신호)
+                var cmd = Protocol.ParseCommand(line);
+                if (cmd is not null && cmd.Id != 0) await Send($"#ERR,{cmd.Id},{cmd.Device},NO_ARDUINO");
+                continue;
+            }
+
             if (!isPing) await Task.Delay(delayMs);
             foreach (var reply in sim.Handle(line)) await Send(reply);
         }
 
         stop.Cancel();
-        await sensorTask;
+        await background;
         Console.WriteLine("허브가 연결을 닫았어요.");
     }
     catch (Exception ex) when (ex is SocketException or IOException)

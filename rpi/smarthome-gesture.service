@@ -1,0 +1,16 @@
+[Unit]
+Description=SmartHome gesture app (MediaPipe)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# 실제 계정 이름과 경로로 바꾸세요
+User=pi
+WorkingDirectory=/home/pi/smart-home/rpi/gesture
+ExecStart=/home/pi/smart-home/rpi/.venv/bin/python gesture_app.py --no-window
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

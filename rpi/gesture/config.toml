@@ -1,0 +1,43 @@
+# 제스처 앱 설정. 개인 설정은 config.local.toml로 복사해서 쓰면 그 파일을 먼저 읽어요.
+
+[hub]
+url = "http://127.0.0.1:5000"   # 라즈베리파이에서는 PC 허브 IP로 (예: http://192.168.0.10:5000)
+timeout_s = 4.0
+
+[camera]
+index = 0          # USB 카메라 번호
+width = 640
+height = 480
+fps = 30
+mirror = true      # 거울처럼 좌우 반전 (손 방향이 직관적)
+
+[recognizer]
+model = "models/gesture_recognizer.task"   # 없으면 처음 실행할 때 자동으로 내려받아요
+min_score = 0.6
+num_hands = 1
+
+[timing]
+wake_hold_s = 1.0        # 깨우기 제스처 유지 시간
+command_hold_s = 0.5     # 명령 제스처 유지 시간
+armed_timeout_s = 5.0    # 깨운 뒤 명령을 기다리는 시간
+cooldown_s = 1.5         # 명령 직후 쉬는 시간
+confirm_timeout_s = 3.0  # 문 확인 단계 대기 시간
+dropout_s = 0.2          # 이 시간 이하로 인식이 끊겨도 같은 제스처로 봐요
+
+[wake]
+gesture = "Open_Palm"    # 손바닥 1초 → 명령 대기
+
+# 명령 대기 상태에서 쓰는 제스처 → 동작
+# 동작 형식: "장치:동작" 또는 "장치:set:값", "briefing", "door:confirm"
+[gestures]
+Thumb_Up = "light:on"
+Thumb_Down = "light:off"
+Victory = "fan:toggle"
+Pointing_Up = "curtain:open"
+Closed_Fist = "curtain:close"
+ILoveYou = "briefing"
+Three_Fingers = "door:confirm"   # 문은 한 번 더 확인해요
+
+[door]
+open = "Thumb_Up"
+close = "Thumb_Down"

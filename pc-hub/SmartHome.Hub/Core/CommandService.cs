@@ -80,7 +80,7 @@ public sealed class CommandService
                         _log.Write("CMD", $"{source}: {dev} → {ack.State} ({sw.ElapsedMilliseconds}ms)");
                         return new CommandResult(true, dev, ack.State, null, null, sw.ElapsedMilliseconds, source);
                     }
-                    if (reply is ErrMessage err) return Fail(dev, $"장치 오류: {err.Reason}", "device_error");
+                    if (reply is ErrMessage err) return Fail(dev, DescribeError(err.Reason), "device_error");
                 }
                 catch (TimeoutException)
                 {
@@ -128,6 +128,15 @@ public sealed class CommandService
         };
     }
 
+    static string DescribeError(string reason) => reason.ToUpperInvariant() switch
+    {
+        "NO_ARDUINO" => "Arduino가 응답하지 않아요 (배선/전원 확인)",
+        "BAD_COMMAND" => "장치가 모르는 명령이에요",
+        "BAD_VALUE" => "값이 범위를 벗어났어요",
+        "BUSY" => "장치가 아직 움직이는 중이에요",
+        _ => $"장치 오류: {reason}",
+    };
+
     int NextId()
     {
         var id = Interlocked.Increment(ref _nextId) % 10000;
@@ -136,6 +145,8 @@ public sealed class CommandService
 
     void OnLine(string line)
     {
+        if (Protocol.IsComment(line)) return; // 펌웨어 디버그 출력
+
         switch (Protocol.Parse(line))
         {
             case AckMessage ack:
@@ -160,6 +171,12 @@ public sealed class CommandService
             case EvtMessage evt:
                 _log.Write("EVT", line);
                 EventReceived?.Invoke(evt);
+                break;
+
+            case StatusMessage status:
+                var arduino = _state.ApplyStatus(status);
+                if (arduino == false) _log.Write("WARN", "ESP32: Arduino가 응답하지 않아요 (배선/전원 확인)");
+                if (arduino == true) _log.Write("NET", "ESP32: Arduino 연결됨");
                 break;
 
             case HelloMessage:

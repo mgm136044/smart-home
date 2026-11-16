@@ -259,8 +259,11 @@ public sealed class MainForm : Form
 
     void Render(HomeSnapshot s)
     {
-        _link.Text = s.Connected ? $"● 연결됨: {s.Link}" : "● 오프라인 (ESP32 연결 없음)";
-        _link.ForeColor = s.Connected ? Color.SeaGreen : Color.Firebrick;
+        var esp = s.Esp is { } e
+            ? (e.Rssi is { } rssi ? $" · 신호 {rssi}dBm" : "") + (e.Simulated ? " · ESP32 단독 모드" : "") + (e.Arduino ? "" : " · Arduino 응답 없음")
+            : "";
+        _link.Text = s.Connected ? $"● 연결됨: {s.Link}{esp}" : "● 오프라인 (ESP32 연결 없음)";
+        _link.ForeColor = !s.Connected ? Color.Firebrick : s.Esp is { Arduino: false } ? Color.DarkOrange : Color.SeaGreen;
 
         SetState(_fanState, s.Fan ? "켜짐" : "꺼짐", s.Fan);
         SetState(_lightState, s.Light ? "켜짐" : "꺼짐", s.Light);

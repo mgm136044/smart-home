@@ -12,6 +12,16 @@ PC 허브 ↔ ESP32 사이의 줄 단위 프로토콜과, 휴대폰/라즈베리
 - PC → ESP32는 `@`로, ESP32 → PC는 `#`로 시작해요.
 - 대소문자는 구분하지 않지만 대문자로 보내는 걸 권장해요.
 
+### 역할 나눔
+
+```text
+PC 허브 ──(Wi-Fi TCP / USB)── ESP32 ──(UART 9600)── Arduino
+```
+
+- ESP32는 `@` 명령을 Arduino로 그대로 넘기고, Arduino의 `#` 줄을 PC로 그대로 올려요 (중계).
+- ESP32가 직접 만드는 줄은 `#HELLO`, `#STATUS`, `#ERR,...,NO_ARDUINO`뿐이에요.
+- ESP32 단독 모드(`BRIDGE_TO_ARDUINO 0`)에서는 ESP32가 가상 장치처럼 ACK/SENS/STATE를 만들어요.
+
 ### PC → ESP32 (명령)
 
 ```text
@@ -35,10 +45,23 @@ PC 허브 ↔ ESP32 사이의 줄 단위 프로토콜과, 휴대폰/라즈베리
 |---|---|---|
 | HELLO | `#HELLO,esp32-01,<토큰>` | TCP 접속 직후 첫 줄 (USB는 생략) |
 | ACK | `#ACK,17,FAN,ON` | 명령 성공. 마지막 값은 **실제 상태** |
-| ERR | `#ERR,19,CURTAIN,BUSY` | 명령 실패 + 이유 |
-| SENS | `#SENS,T=24.5,H=41.0,L=530,IR=0` | 1초마다 |
-| STATE | `#STATE,FAN=1,LIGHT=0,CURTAIN=70,DOOR=0` | PING 응답, 부팅 직후 |
-| EVT | `#EVT,IR,DETECTED` | 비동기 이벤트 |
+| ERR | `#ERR,19,CURTAIN,BAD_VALUE` | 명령 실패 + 이유 (아래 표) |
+| SENS | `#SENS,T=24.5,H=41.0,L=530,IR=0` | 1초마다 (Arduino) |
+| STATE | `#STATE,FAN=1,LIGHT=0,CURTAIN=70,DOOR=0` | PING 응답, 부팅 직후 (Arduino) |
+| STATUS | `#STATUS,ARDUINO=1,RSSI=-55,UP=123` | 2초마다 (ESP32). Wi-Fi 신호, Arduino 응답 여부, 부팅 후 초. 단독 모드면 `SIM=1` |
+| EVT | `#EVT,IR,DETECTED` / `#EVT,CURTAIN,DONE` | 비동기 이벤트 |
+| (주석) | `// 허브 접속` | `//`로 시작하는 줄은 펌웨어 디버그 출력. 허브가 무시해요 |
+
+ERR 이유:
+
+| 이유 | 뜻 | 보내는 쪽 |
+|---|---|---|
+| NO_ARDUINO | Arduino가 3초 동안 아무 줄도 안 보냄 (배선/전원) | ESP32 |
+| BAD_COMMAND | 모르는 장치나 동작 | Arduino |
+| BAD_VALUE | 커튼 값이 0~100 밖 | Arduino |
+| BUSY | 장치가 아직 동작 중 (예약) | Arduino |
+
+커튼은 끝까지 움직이는 데 몇 초 걸려서, **목표를 받으면 바로 ACK**(목표 값)하고 다 움직이면 `#EVT,CURTAIN,DONE`을 보내요.
 
 ACK의 상태 값:
 
@@ -53,8 +76,8 @@ SENS 키: `T` 온도(℃), `H` 습도(%), `L` 조도(원시값 또는 lux), `IR`
 ### 연결 유지 규칙
 
 - ESP32는 PC:5001로 접속하고 바로 `#HELLO`를 보내요. 6초 안에 HELLO가 없거나 토큰이 틀리면 PC가 끊어요.
-- PC는 접속 직후와 5초마다 `@0,PING`을 보내고, ESP32는 `#STATE`로 답해요.
-- PC는 6초 동안 아무 줄도 안 오면 끊김으로 처리해요. SENS가 1초마다 와서 이게 생존 신호예요.
+- PC는 접속 직후와 5초마다 `@0,PING`을 보내고(TCP, USB 모두), Arduino가 `#STATE`로 답해요.
+- PC는 6초 동안 아무 줄도 안 오면 끊김으로 처리해요. ESP32가 2초마다 보내는 `#STATUS`가 생존 신호라 Arduino가 빠져도 연결은 유지돼요.
 - ESP32는 15초 동안 PC에서 아무것도 안 오면 연결을 끊고 3초 간격으로 다시 접속해요.
 - PC는 ACK를 2초 기다리고, 없으면 같은 id로 한 번 더 보내요. 그래도 없으면 실패(timeout)예요.
 
@@ -111,7 +134,8 @@ X-Source: gesture
 ```json
 {"type":"state","data":{"fan":true,"light":false,"curtain":70,"door":false,
   "sensors":{"time":"2026-11-16T15:25:22+09:00","temp":24.3,"hum":46.2,"lux":404,"ir":0},
-  "connected":true,"link":"Wi-Fi TCP esp32-01 192.168.0.20"}}
+  "connected":true,"link":"Wi-Fi TCP esp32-01 192.168.0.20",
+  "esp":{"rssi":-55,"arduino":true,"uptime":123,"simulated":false}}}
 {"type":"sensor","data":{"time":"...","temp":24.3,"hum":46.2,"lux":404,"ir":0}}
 {"type":"log","data":{"time":"...","kind":"CMD","text":"phone: FAN → ON (42ms)"}}
 ```

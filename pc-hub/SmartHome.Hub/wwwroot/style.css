@@ -23,6 +23,8 @@ h2 { font-size: 15px; margin: 0; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--off); flex: none; }
 .link.on .dot { background: var(--on); }
 .link.off .dot { background: var(--bad); }
+.link.warn .dot { background: #f59e0b; }
+.link.warn { color: #d97706; }
 .ws { font-size: 12px; color: var(--bad); padding-top: 6px; }
 .ws.on { color: var(--muted); }
 

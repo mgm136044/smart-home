@@ -5,6 +5,8 @@
 - 구현 계획: `docs/plan.md`
 - 구조도: `docs/architecture.html` (브라우저로 열기)
 - 통신 규격: `docs/protocol.md`
+- 배선(참고안): `docs/wiring.md`
+- 제스처 앱: `rpi/README.md`
 
 ## 폴더 구조
 
@@ -19,7 +21,11 @@ smart-home/
 │  ├─ UI/          MainForm (장치 제어, 센서, 그래프, 로그)
 │  ├─ wwwroot/     휴대폰/아이패드 대시보드 (HTML/CSS/JS, 라이브러리 없음)
 │  └─ hubsettings.json
-└─ tools/Esp32Sim/             ESP32 시뮬레이터 (실제 ESP32처럼 Wi-Fi TCP로 접속)
+├─ tools/Esp32Sim/             ESP32 시뮬레이터 (실제 ESP32처럼 Wi-Fi TCP로 접속)
+├─ firmware/
+│  ├─ esp32/SmartHomeEsp32/    ESP32: WiFiManager, OTA, TCP/USB, Arduino 중계 (단독 테스트 모드 포함)
+│  └─ arduino/SmartHomeUno/    Arduino Uno 참고 구현: 팬/릴레이/서보/스텝, 온습도/조도/적외선
+└─ rpi/                        제스처 앱 (Python, MediaPipe Tasks) + systemd 서비스
 ```
 
 ## 지금 되는 것 (2026-11-16)
@@ -30,6 +36,9 @@ smart-home/
 - 통로 자동 전환: Wi-Fi TCP → USB → 가상 장치
 - 명령 번호 + ACK 매칭, 2초 타임아웃 + 1회 재시도, 토글을 절대값으로 변환
 - 모든 화면 실시간 동기화 (WebSocket), WinForms 온습도 그래프(ScottPlot), 통신 로그(파일 포함)
+- ESP32 상태 표시: Wi-Fi 신호(dBm), Arduino 응답 여부, 단독 모드. Arduino가 없으면 명령이 바로 실패로 돌아와요
+- ESP32/Arduino 펌웨어 (컴파일 확인, 보드 업로드는 아직)
+- 제스처 앱: 상태머신 테스트 14개, 예제 사진 인식 → 허브 → 장치까지 확인 (카메라 실시간 확인은 아직)
 
 ## 실행 방법
 
@@ -83,9 +92,23 @@ New-NetFirewallRule -DisplayName "SmartHome Hub" -Direction Inbound -Protocol TC
 
 개인 설정은 `hubsettings.local.json`으로 복사해서 쓰면 깃에 안 올라가요(.gitignore).
 
+## 펌웨어 업로드
+
+Arduino IDE 또는 arduino-cli. 라이브러리: WiFiManager(tzapu 2.x), Stepper, DHT sensor library, Adafruit Unified Sensor, Servo
+
+```powershell
+$cli = "C:\Program Files\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe"
+& $cli compile --fqbn esp32:esp32:esp32 firmware/esp32/SmartHomeEsp32 -u -p COM5     # ESP32
+& $cli compile --fqbn arduino:avr:uno firmware/arduino/SmartHomeUno -u -p COM4        # Uno
+```
+
+ESP32 처음 설정: 폰으로 `SmartHome-Setup`(비번 smarthome) Wi-Fi에 접속 → 공유기 SSID/비번 + PC 허브 IP 입력.
+부팅 직후 2초 안에 BOOT 버튼을 누르면 Wi-Fi 설정을 지우고 설정 화면을 다시 열어요.
+이후 업로드는 Arduino IDE 포트 목록의 `smarthome-esp32` 네트워크 포트(OTA, 비번 smarthome-ota)로 해요.
+
 ## 다음 할 일
 
-1. ESP32 펌웨어 통신부 (WiFiManager + TCP + 줄 프로토콜 + Arduino 중계)
-2. 라즈베리파이 제스처 앱 (Python, MediaPipe Tasks API) → `POST /api/devices/...` (`X-Source: gesture`)
+1. 실제 보드 업로드와 배선 확인 (`docs/wiring.md`의 시험 순서)
+2. 제스처 앱을 웹캠/라즈베리파이 카메라로 실제 확인, 인식 점수/시간 조정
 3. 자동화 규칙 (온습도 → 팬, 조도 → 커튼/전등, 수동 우선 10분)
 4. 센서 기록 SQLite 저장, 브리핑(기상청 + 캘린더 + TTS)

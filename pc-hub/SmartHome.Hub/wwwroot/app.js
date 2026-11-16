@@ -15,8 +15,16 @@ const samples = [];
 // ───────── 화면 그리기 ─────────
 
 function render(st) {
-  $('#link').className = 'link ' + (st.connected ? 'on' : 'off');
-  $('#linkText').textContent = st.connected ? st.link : 'ESP32 연결 없음';
+  const esp = st.esp;
+  const warn = st.connected && esp && !esp.arduino;
+  $('#link').className = 'link ' + (!st.connected ? 'off' : warn ? 'warn' : 'on');
+  let text = st.connected ? st.link : 'ESP32 연결 없음';
+  if (st.connected && esp) {
+    if (esp.rssi != null) text += ` · 신호 ${esp.rssi}dBm`;
+    if (esp.simulated) text += ' · ESP32 단독 모드';
+    if (!esp.arduino) text += ' · Arduino 응답 없음';
+  }
+  $('#linkText').textContent = text;
   setDevice('fan', st.fan ? '켜짐' : '꺼짐', st.fan, st.fan ? 'on' : 'off');
   setDevice('light', st.light ? '켜짐' : '꺼짐', st.light, st.light ? 'on' : 'off');
   setDevice('curtain', `${st.curtain}%`, st.curtain > 0, null);
