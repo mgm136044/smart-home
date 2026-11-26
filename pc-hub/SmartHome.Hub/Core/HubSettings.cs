@@ -18,6 +18,9 @@ public sealed class HubSettings
     /// <summary>라즈베리파이 제스처 앱 미리보기 주소 (예: http://192.168.137.44:8080). 비우면 대시보드에 카메라 칸이 안 나와요.</summary>
     public string CameraUrl { get; set; } = "";
 
+    /// <summary>영역전개(무량공처) 효과가 나오면 커튼을 닫고 전등을 꺼서 방을 어둡게 만들지</summary>
+    public bool EffectScene { get; set; } = true;
+
     public static HubSettings Load(string path)
     {
         if (!File.Exists(path)) return new HubSettings();

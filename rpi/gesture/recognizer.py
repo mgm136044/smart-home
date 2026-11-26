@@ -4,7 +4,9 @@
 인터넷 예제나 AI가 짜준 코드가 mp.solutions를 쓰면 동작하지 않아요. 여기서는 Tasks API만 써요.
 
 기본 제스처 7가지: Closed_Fist, Open_Palm, Pointing_Up, Thumb_Down, Thumb_Up, Victory, ILoveYou
-추가 제스처 1가지: Three_Fingers (엄지를 뺀 손가락 3개, 손 랜드마크로 직접 계산)
+추가 제스처 (손 랜드마크로 직접 계산):
+  Three_Fingers  엄지를 뺀 손가락 3개
+  Gojo_Cross     검지와 중지를 꼬기 (고죠 사토루 '무량공처' 결인). 스페셜 효과용
 """
 
 from __future__ import annotations
@@ -55,7 +57,32 @@ def ensure_model(path: str | Path) -> Path:
     return path
 
 
-def decide_label(canned: str, score: float, fingers: int, min_score: float) -> str | None:
+def is_crossed_fingers(points: list[tuple[float, float]], aspect: float = 1.0) -> bool:
+    """검지와 중지를 펴서 꼬았는지 (나머지 두 손가락은 접힘).
+    손등 위 검지→중지 관절 방향을 기준으로, 중지 끝이 검지 끝보다 검지 쪽에 있으면 꼬인 거예요.
+    손을 기울이거나 왼손/오른손이어도 같은 기준으로 판단돼요."""
+    def vec(a: int, b: int) -> tuple[float, float]:
+        return ((points[b][0] - points[a][0]) * aspect, points[b][1] - points[a][1])
+
+    def dist(a: int, b: int) -> float:
+        return math.hypot(*vec(a, b))
+
+    def extended(tip: int, pip: int) -> bool:
+        return dist(0, tip) > dist(0, pip) * 1.15
+
+    if not (extended(8, 6) and extended(12, 10)):
+        return False
+    if extended(16, 14) or extended(20, 18):
+        return False
+    ux, uy = vec(5, 9)      # 검지 뿌리 → 중지 뿌리
+    vx, vy = vec(8, 12)     # 검지 끝 → 중지 끝
+    knuckle2 = ux * ux + uy * uy
+    if knuckle2 <= 1e-9:
+        return False
+    return (ux * vx + uy * vy) / knuckle2 < -0.05
+
+
+def decide_label(canned: str, score: float, fingers: int, min_score: float, crossed: bool = False) -> str | None:
     """상태머신에 넣을 최종 제스처 이름.
 
     라즈베리파이 실측(11/26)에서 손바닥 점수가 0.5~0.66으로 낮게 나와서 깨우기가 자꼬 끊겼고,
@@ -63,7 +90,10 @@ def decide_label(canned: str, score: float, fingers: int, min_score: float) -> s
       1) 엄지 제외 손가락 4개가 다 펴져 있으면 점수와 상관없이 Open_Palm
       2) 손가락 3개는 모델이 Open_Palm이라고 하지 않을 때만 Three_Fingers
       3) 나머지는 기본 분류 결과를 점수 기준(min_score) 이상일 때만 써요
+    꼬인 손가락(Gojo_Cross)은 모델이 브이(Victory)로 보기 쉬워서 가장 먼저 확인해요.
     """
+    if crossed:
+        return "Gojo_Cross"
     if fingers == 4:
         return "Open_Palm"
     if fingers == 3 and canned != "Open_Palm":
@@ -116,7 +146,8 @@ class GestureReader:
         h, w = rgb.shape[:2]
         fingers = count_fingers(points, aspect=w / h if h else 1.0)
 
-        label = decide_label(canned, score, fingers, self.min_score)
+        crossed = is_crossed_fingers(points, aspect=w / h if h else 1.0)
+        label = decide_label(canned, score, fingers, self.min_score, crossed)
         return HandReading(label, canned, score, fingers, hand, points)
 
     def close(self) -> None:

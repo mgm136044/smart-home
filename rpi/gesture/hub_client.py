@@ -33,6 +33,19 @@ class HubClient:
     def send_sync(self, device: str, action: str, value: int | None = None) -> dict:
         return self._post(device, action, value)
 
+    def send_effect(self, name: str) -> None:
+        """특수 효과를 허브에 알려요 (대시보드 전체 화면 연출 + 설정에 따라 집 연출). 기다리지 않아요."""
+        if self.dry_run:
+            return
+
+        def post() -> None:
+            try:
+                self._session.post(f"{self.base_url}/api/effects/{name}", headers={"X-Source": self.source}, timeout=self.timeout_s)
+            except requests.RequestException:
+                pass
+
+        threading.Thread(target=post, name="hub-effect", daemon=True).start()
+
     def state(self) -> dict | None:
         try:
             return self._session.get(f"{self.base_url}/api/state", timeout=self.timeout_s).json()

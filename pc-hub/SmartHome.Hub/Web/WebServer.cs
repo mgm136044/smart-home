@@ -81,6 +81,26 @@ public sealed class WebServer : IAsyncDisposable
 
         app.MapGet("/api/logs", () => log.Recent());
 
+        // 특수 효과: 대시보드 전체 화면 연출 + (설정에 따라) 집 연출
+        app.MapPost("/api/effects/{name}", (string name, HttpContext http) =>
+        {
+            if (name != "infinite_void")
+                return Results.Json(new { ok = false, error = $"모르는 효과예요: {name}" }, Json, statusCode: 400);
+
+            var source = http.Request.Headers["X-Source"].FirstOrDefault() ?? "web";
+            log.Write("EVT", $"{source}: 영역전개 · 무량공처");
+            Broadcast("effect", new { name, source });
+            if (settings.EffectScene)
+            {
+                _ = Task.Run(async () =>
+                {
+                    await commands.ExecuteAsync("curtain", "close", null, "effect");
+                    await commands.ExecuteAsync("light", "off", null, "effect");
+                });
+            }
+            return Results.Json(new { ok = true, name, scene = settings.EffectScene }, Json);
+        });
+
         // 라즈베리파이 카메라 미리보기를 허브가 대신 받아서 전달해요.
         // 그래서 아이패드는 라즈베리파이 주소를 몰라도 허브 주소만으로 카메라를 볼 수 있어요.
         app.MapGet("/api/camera", () => new { enabled = !string.IsNullOrWhiteSpace(settings.CameraUrl), url = settings.CameraUrl });

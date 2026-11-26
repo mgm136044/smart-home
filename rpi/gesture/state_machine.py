@@ -37,11 +37,13 @@ class Timing:
     cooldown_s: float = 1.5
     confirm_timeout_s: float = 3.0
     dropout_s: float = 0.2
+    instant_hold_s: float = 0.8       # 특수 손모양(예: 무량공처) 유지 시간
+    instant_cooldown_s: float = 8.0   # 특수 효과는 8초에 한 번만
 
 
 @dataclass
 class Action:
-    """kind: command(장치 명령) | briefing(브리핑) | mode(상태 변화 알림)"""
+    """kind: command(장치 명령) | briefing(브리핑) | effect(특수 효과, action=효과 이름) | mode(상태 변화 알림)"""
     kind: str
     gesture: str = ""
     device: str | None = None
@@ -53,6 +55,8 @@ class Action:
         if self.kind == "command":
             v = f" {self.value}" if self.value is not None else ""
             return f"{self.device} {self.action}{v} ({self.gesture})"
+        if self.kind == "effect":
+            return f"effect {self.action} ({self.gesture})"
         return f"{self.kind}: {self.note or self.gesture}"
 
 
@@ -60,6 +64,8 @@ def parse_target(target: str, gesture: str) -> Action:
     """설정의 "light:on", "curtain:set:50", "briefing" 같은 문자열을 Action으로 바꿔요."""
     if target == "briefing":
         return Action("briefing", gesture=gesture)
+    if target.startswith("effect:"):
+        return Action("effect", gesture=gesture, action=target.split(":", 1)[1])
     parts = target.split(":")
     if len(parts) < 2:
         raise ValueError(f"제스처 설정 형식이 잘못됐어요: {target!r} (예: light:on)")
@@ -77,8 +83,13 @@ class GestureStateMachine:
         timing: Timing | None = None,
         door_open: str = "Thumb_Up",
         door_close: str = "Thumb_Down",
+        instant: dict[str, str] | None = None,
     ) -> None:
         self.mapping = mapping
+        self.instant = instant or {}  # 깨우지 않아도 바로 되는 특수 손모양
+        for target in self.instant.values():
+            parse_target(target, "")
+        self._last_instant = -1e9
         self.wake = wake
         self.t = timing or Timing()
         self.door_open = door_open
@@ -120,6 +131,13 @@ class GestureStateMachine:
     def update(self, label: str | None, now: float) -> list[Action]:
         label = self._smooth(label if label and label != "None" else None, now)
         held = self._track(label, now, self._stable_since)
+
+        # 특수 손모양: 어느 상태에서든(문 확인 중 제외) 유지만 하면 바로 발동, 상태는 안 바꿔요
+        if (label in self.instant and not self._fired and self.mode is not Mode.CONFIRM
+                and held >= self.t.instant_hold_s and now - self._last_instant >= self.t.instant_cooldown_s):
+            self._fired = True
+            self._last_instant = now
+            return [parse_target(self.instant[label], label)]
 
         if self.mode is Mode.COOLDOWN:
             if now - self._mode_since >= self.t.cooldown_s:

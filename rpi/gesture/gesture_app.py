@@ -15,6 +15,7 @@
       엄지 위 = 전등 켜기 / 엄지 아래 = 전등 끄기 / 브이 = 팬 켜기·끄기
       검지 위 = 커튼 열기 / 주먹 = 커튼 닫기 / 아이러브유 = 브리핑
       손가락 3개 → 엄지 위 = 문 열기 / 엄지 아래 = 문 닫기
+    특수: 검지와 중지를 꼬아서 0.8초 → 영역전개 · 무량공처 (깨우지 않아도 됨)
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from pathlib import Path
 
 import cv2
 
+from effects import EffectPlayer
 from hub_client import HubClient
 from preview import PreviewServer
 from recognizer import HAND_CONNECTIONS, GestureReader, HandReading
@@ -73,6 +75,7 @@ def build_state_machine(cfg: dict) -> GestureStateMachine:
         timing=timing,
         door_open=door.get("open", "Thumb_Up"),
         door_close=door.get("close", "Thumb_Down"),
+        instant=dict(cfg.get("instant", {})),
     )
 
 
@@ -115,10 +118,17 @@ class Status:
         self.text, self.bad, self.at = text, bad, time.monotonic()
 
 
-def handle(action: Action, hub: HubClient, status: Status) -> None:
+def handle(action: Action, hub: HubClient, status: Status, fx: EffectPlayer | None = None) -> None:
     stamp = time.strftime("%H:%M:%S")
     if action.kind == "mode":
         print(f"[{stamp}] {action.note}")
+        return
+
+    if action.kind == "effect":
+        print(f"[{stamp}] 제스처 {action.gesture} → 특수 효과 {action.action}")
+        if fx:
+            fx.start(action.action or "")
+        hub.send_effect(action.action or "")
         return
 
     if action.kind == "briefing":
@@ -143,9 +153,14 @@ def handle(action: Action, hub: HubClient, status: Status) -> None:
 
 # ───────────────────────── 화면 ─────────────────────────
 
-def draw(frame, reading: HandReading | None, sm: GestureStateMachine, now: float, status: Status, fps: float) -> None:
+def draw(frame, reading: HandReading | None, sm: GestureStateMachine, now: float, status: Status, fps: float,
+         fx: EffectPlayer | None = None) -> None:
     h, w = frame.shape[:2]
     color = MODE_COLOR[sm.mode]
+
+    if fx and fx.active:
+        center = (int(reading.points[9][0] * w), int(reading.points[9][1] * h)) if reading else None
+        fx.render(frame, center)
 
     if reading:
         pts = [(int(x * w), int(y * h)) for x, y in reading.points]
@@ -257,6 +272,7 @@ def run_live(args: argparse.Namespace, cfg: dict) -> None:
     if preview:
         print(f"미리보기: http://<이 기기 IP>:{args.preview_port}")
     logger = ReadingLogger() if args.verbose else None
+    fx = EffectPlayer()
     status, fps = Status(), FpsMeter()
     start, frame_index, last_ts = time.monotonic(), 0, -1
     last_fps_print = time.monotonic()
@@ -280,7 +296,7 @@ def run_live(args: argparse.Namespace, cfg: dict) -> None:
             if logger:
                 logger.log(reading, sm)
             for action in sm.update(reading.label if reading else None, now):
-                handle(action, hub, status)
+                handle(action, hub, status, fx)
             fps.tick()
 
             if args.no_window and time.monotonic() - last_fps_print >= 10:
@@ -288,7 +304,7 @@ def run_live(args: argparse.Namespace, cfg: dict) -> None:
                 print(f"[{time.strftime('%H:%M:%S')}] {fps.value:.1f} fps")
 
             if not args.no_window or preview:
-                draw(frame, reading, sm, now, status, fps.value)
+                draw(frame, reading, sm, now, status, fps.value, fx)
                 if preview:
                     preview.update(frame)
                 if not args.no_window:

@@ -98,7 +98,7 @@ function toast(msg, bad = false) {
 // ───────── 기록 ─────────
 
 const SHOWN_LOGS = ['CMD', 'FAIL', 'WARN', 'NET', 'EVT', 'ERROR'];
-const SOURCES = { phone: '휴대폰', tablet: '아이패드', web: '웹', winforms: 'PC', gesture: '제스처', auto: '자동', test: '테스트' };
+const SOURCES = { phone: '휴대폰', tablet: '아이패드', web: '웹', winforms: 'PC', gesture: '제스처', auto: '자동', test: '테스트', effect: '영역전개' };
 
 // "phone: FAN → ON (42ms)" → "휴대폰 · 팬 켜짐"
 function prettyLog(e) {
@@ -219,6 +219,7 @@ function connect() {
     if (m.type === 'state') render(m.data);
     else if (m.type === 'sensor') addSample(m.data);
     else if (m.type === 'log') addLog(m.data);
+    else if (m.type === 'effect') playEffect(m.data.name);
   };
   ws.onclose = () => {
     $('#ws').textContent = '실시간 끊김 · 다시 연결 중';
@@ -262,6 +263,113 @@ async function initCamera() {
   };
   start();
 }
+
+// ───────── 영역전개 · 무량공처 (코드로 그리는 연출, 이미지/음원 파일 없음) ─────────
+
+const FX_MS = 6500;
+let fxRun = 0;
+let audioCtx = null;
+
+// 브라우저는 화면을 한 번 눌러야 소리를 낼 수 있어요 (아이패드는 버튼만 눌러도 돼요)
+addEventListener('pointerdown', () => {
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch { /* 소리 없이 */ }
+}, { once: false, passive: true });
+
+function fxSound() {
+  if (!audioCtx || audioCtx.state !== 'running') return;
+  const t0 = audioCtx.currentTime, out = audioCtx.createGain();
+  out.gain.setValueAtTime(0.0001, t0);
+  out.gain.exponentialRampToValueAtTime(0.35, t0 + 0.8);
+  out.gain.exponentialRampToValueAtTime(0.0001, t0 + FX_MS / 1000);
+  out.connect(audioCtx.destination);
+  // 낮게 울리는 소리 + 위로 올라가는 맑은 소리 (직접 합성)
+  [[55, 'sine', 1], [82.5, 'sine', 0.5], [440, 'triangle', 0.08]].forEach(([f, type, g], i) => {
+    const o = audioCtx.createOscillator(), og = audioCtx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t0);
+    if (i === 2) o.frequency.exponentialRampToValueAtTime(1760, t0 + 3);
+    og.gain.value = g; o.connect(og).connect(out);
+    o.start(t0); o.stop(t0 + FX_MS / 1000);
+  });
+}
+
+function playEffect(name) {
+  if (name !== 'infinite_void') return;
+  const run = ++fxRun;
+  const box = $('#fx'), cv = $('#fxCanvas'), g = cv.getContext('2d');
+  box.hidden = false;
+  box.className = 'fx';
+  requestAnimationFrame(() => { box.className = 'fx on'; });
+  setTimeout(() => { if (run === fxRun) box.classList.add('sub'); }, 600);
+  setTimeout(() => { if (run === fxRun) box.classList.add('main'); }, 1400);
+  fxSound();
+
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const stars = Array.from({ length: 420 }, () => ({ a: Math.random() * Math.PI * 2, z: Math.random(), s: 0.25 + Math.random() * 0.75, h: Math.random() }));
+  const streams = Array.from({ length: 60 }, () => ({ x: Math.random(), y: Math.random(), v: 0.15 + Math.random() * 0.5, l: 0.05 + Math.random() * 0.2 }));
+  const t0 = performance.now();
+
+  function frame(now) {
+    if (run !== fxRun) return;
+    const t = (now - t0) / 1000;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cx = w / 2, cy = h * 0.42, m = Math.min(w, h);
+
+    // 깊은 우주 배경
+    const bg = g.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(w, h) * 0.6);
+    bg.addColorStop(0, '#0b1030'); bg.addColorStop(0.5, '#05061a'); bg.addColorStop(1, '#000');
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+
+    // 끝없이 흘러가는 정보 줄기
+    g.lineWidth = 1;
+    for (const s of streams) {
+      const y = ((s.y + t * s.v) % 1.2 - 0.1) * h;
+      g.strokeStyle = `rgba(120,170,255,${0.18 + 0.2 * Math.sin(t * 3 + s.x * 9) ** 2})`;
+      g.beginPath(); g.moveTo(s.x * w, y); g.lineTo(s.x * w, y - s.l * h); g.stroke();
+    }
+
+    // 별빛 줄기 (중심에서 바깥으로)
+    const ring = m * (0.08 + 0.1 * Math.min(1, t / 1.2)) * (1 + 0.02 * Math.sin(t * 5));
+    const far = Math.hypot(w, h) * 0.7;
+    for (const st of stars) {
+      const p = (st.z + t * st.s * 0.28) % 1;
+      const r1 = ring + p * p * far, r0 = Math.max(ring, r1 - (6 + 70 * p * st.s));
+      const ang = st.a + t * 0.08;
+      const c = Math.cos(ang), s = Math.sin(ang);
+      g.strokeStyle = `hsla(${200 + st.h * 60}, 90%, ${70 + 25 * p}%, ${Math.min(1, p * 2)})`;
+      g.lineWidth = 0.6 + 1.6 * p;
+      g.beginPath(); g.moveTo(cx + c * r0, cy + s * r0); g.lineTo(cx + c * r1, cy + s * r1); g.stroke();
+    }
+
+    // 사건의 지평선: 안은 완전히 검고 테두리는 하얗게 빛나요
+    g.save();
+    g.shadowColor = 'rgba(170,220,255,0.95)';
+    g.shadowBlur = 40;
+    g.fillStyle = '#000';
+    g.beginPath(); g.arc(cx, cy, ring, 0, Math.PI * 2); g.fill();
+    g.lineWidth = 3; g.strokeStyle = '#fff';
+    g.beginPath(); g.arc(cx, cy, ring, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = 2; g.strokeStyle = 'rgba(160,210,255,0.9)';
+    for (let k = 0; k < 3; k++) {
+      const a0 = t * (2 + k * 0.6) + k * 2.1;
+      g.beginPath(); g.arc(cx, cy, ring + 8 + k * 6, a0, a0 + 1.1); g.stroke();
+    }
+    g.restore();
+
+    // 끝날 때 서서히 사라지기
+    if (t * 1000 > FX_MS - 900) box.classList.remove('on');
+    if (t * 1000 < FX_MS) requestAnimationFrame(frame);
+    else { box.hidden = true; box.className = 'fx'; }
+  }
+  requestAnimationFrame(frame);
+}
+
+$('#fx').addEventListener('click', () => { fxRun++; $('#fx').hidden = true; $('#fx').className = 'fx'; });
+$('#fxTest').addEventListener('click', async () => {
+  try { await fetch('/api/effects/infinite_void', { method: 'POST', headers: { 'X-Source': SOURCE } }); }
+  catch { toast('허브에 연결할 수 없어요', true); }
+});
 
 new ResizeObserver(() => drawChart()).observe($('#chart'));
 initCamera();

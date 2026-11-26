@@ -59,11 +59,20 @@
 </section>
 
 <section class="panel">
-  <div class="panel-head"><h2>최근 기록</h2></div>
+  <div class="panel-head"><h2>최근 기록</h2><button id="fxTest" class="mini" type="button">영역전개 시험</button></div>
   <ul id="log"></ul>
 </section>
 
 <div id="toast" role="status"></div>
+
+<!-- 영역전개 · 무량공처 전체 화면 연출 (제스처 또는 '영역전개 시험' 버튼) -->
+<div id="fx" class="fx" hidden>
+  <canvas id="fxCanvas"></canvas>
+  <div class="fx-text">
+    <div class="fx-sub" id="fxSub">영역전개</div>
+    <div class="fx-main" id="fxMain">무량공처</div>
+  </div>
+</div>
 <script src="app.js"></script>
 </body>
 </html>
