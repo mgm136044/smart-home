@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Logging;
 using SmartHome.Hub.Core;
 
@@ -25,6 +26,9 @@ public sealed class WebServer : IAsyncDisposable
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
+
+    // 카메라 스트림은 끝이 없어서 전체 시간 제한을 끄고, 접속만 3초 안에 되는지 봐요
+    static readonly HttpClient CameraHttp = new() { Timeout = Timeout.InfiniteTimeSpan };
 
     readonly ConcurrentDictionary<Guid, Client> _clients = new();
     WebApplication? _app;
@@ -77,6 +81,12 @@ public sealed class WebServer : IAsyncDisposable
 
         app.MapGet("/api/logs", () => log.Recent());
 
+        // 라즈베리파이 카메라 미리보기를 허브가 대신 받아서 전달해요.
+        // 그래서 아이패드는 라즈베리파이 주소를 몰라도 허브 주소만으로 카메라를 볼 수 있어요.
+        app.MapGet("/api/camera", () => new { enabled = !string.IsNullOrWhiteSpace(settings.CameraUrl), url = settings.CameraUrl });
+        app.MapGet("/camera/stream", (HttpContext ctx) => ProxyCameraAsync(ctx, settings.CameraUrl, "/stream"));
+        app.MapGet("/camera/snapshot.jpg", (HttpContext ctx) => ProxyCameraAsync(ctx, settings.CameraUrl, "/snapshot.jpg"));
+
         app.Map("/ws", (RequestDelegate)(ctx => HandleSocketAsync(ctx, state)));
 
         state.Changed += snap => Broadcast("state", snap);
@@ -85,6 +95,51 @@ public sealed class WebServer : IAsyncDisposable
 
         await app.StartAsync();
         _app = app;
+    }
+
+    static async Task ProxyCameraAsync(HttpContext ctx, string cameraUrl, string path)
+    {
+        if (string.IsNullOrWhiteSpace(cameraUrl))
+        {
+            ctx.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        using var connect = CancellationTokenSource.CreateLinkedTokenSource(ctx.RequestAborted);
+        connect.CancelAfter(TimeSpan.FromSeconds(3));
+        HttpResponseMessage upstream;
+        try
+        {
+            upstream = await CameraHttp.GetAsync(cameraUrl.TrimEnd('/') + path, HttpCompletionOption.ResponseHeadersRead, connect.Token);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            ctx.Response.StatusCode = StatusCodes.Status502BadGateway; // 제스처 앱이 안 돌고 있거나 주소가 틀림
+            return;
+        }
+
+        using (upstream)
+        {
+            ctx.Response.StatusCode = (int)upstream.StatusCode;
+            ctx.Response.ContentType = upstream.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
+            ctx.Response.Headers.CacheControl = "no-cache";
+            ctx.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
+            var buffer = new byte[32 * 1024];
+            try
+            {
+                await using var source = await upstream.Content.ReadAsStreamAsync(ctx.RequestAborted);
+                int n;
+                while ((n = await source.ReadAsync(buffer, ctx.RequestAborted)) > 0)
+                {
+                    await ctx.Response.Body.WriteAsync(buffer.AsMemory(0, n), ctx.RequestAborted);
+                    await ctx.Response.Body.FlushAsync(ctx.RequestAborted);
+                }
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or IOException or HttpRequestException)
+            {
+                // 브라우저를 닫았거나 제스처 앱이 멈춤
+            }
+        }
     }
 
     async Task HandleSocketAsync(HttpContext ctx, HomeState state)

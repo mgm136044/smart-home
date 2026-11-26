@@ -15,6 +15,9 @@ public sealed class HubSettings
     public int CommandTimeoutMs { get; set; } = 2000;
     public int CommandRetries { get; set; } = 1;
 
+    /// <summary>라즈베리파이 제스처 앱 미리보기 주소 (예: http://192.168.137.44:8080). 비우면 대시보드에 카메라 칸이 안 나와요.</summary>
+    public string CameraUrl { get; set; } = "";
+
     public static HubSettings Load(string path)
     {
         if (!File.Exists(path)) return new HubSettings();

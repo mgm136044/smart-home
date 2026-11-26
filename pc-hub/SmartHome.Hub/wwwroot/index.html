@@ -18,6 +18,14 @@
   <div id="ws" class="ws">실시간 연결 중</div>
 </header>
 
+<section class="panel camera" id="cameraPanel" hidden>
+  <div class="panel-head"><h2>제스처 카메라</h2><span class="muted" id="cameraState">연결 중</span></div>
+  <div class="cam-wrap">
+    <img id="cameraImg" alt="라즈베리파이 카메라">
+    <div class="cam-msg" id="cameraMsg">카메라 연결 중</div>
+  </div>
+</section>
+
 <section class="sensors">
   <div class="tile"><div class="k">온도</div><div class="v"><span id="temp">-</span><small>°C</small></div></div>
   <div class="tile"><div class="k">습도</div><div class="v"><span id="hum">-</span><small>%</small></div></div>

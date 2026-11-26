@@ -10,6 +10,7 @@ internal static class Program
     ///   --fake      가상 장치 켜기          --no-fake   가상 장치 끄기
     ///   --local     이 PC에서만 접속 (127.0.0.1, 방화벽 창이 안 떠요)
     ///   --headless  창 없이 서버만 실행 (테스트용)
+    ///   --camera-url http://IP:8080   라즈베리파이 카메라 미리보기 주소 (설정보다 우선)
     /// 설정 파일: hubsettings.local.json이 있으면 그걸, 없으면 hubsettings.json을 읽어요.
     /// </summary>
     [STAThread]
@@ -21,6 +22,8 @@ internal static class Program
         if (args.Contains("--fake")) settings.UseFakeDevice = true;
         if (args.Contains("--no-fake")) settings.UseFakeDevice = false;
         if (args.Contains("--local")) settings.ListenAddress = "127.0.0.1";
+        var cameraIndex = Array.IndexOf(args, "--camera-url");
+        if (cameraIndex >= 0 && cameraIndex + 1 < args.Length) settings.CameraUrl = args[cameraIndex + 1];
         var headless = args.Contains("--headless");
 
         var host = new HubHost(settings, Path.Combine(baseDir, "logs"));

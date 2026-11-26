@@ -22,7 +22,7 @@ command_hold_s = 0.5     # 명령 제스처 유지 시간
 armed_timeout_s = 5.0    # 깨운 뒤 명령을 기다리는 시간
 cooldown_s = 1.5         # 명령 직후 쉬는 시간
 confirm_timeout_s = 3.0  # 문 확인 단계 대기 시간
-dropout_s = 0.2          # 이 시간 이하로 인식이 끊겨도 같은 제스처로 봐요
+dropout_s = 0.3          # 이 시간 이하로 인식이 끊겨도 같은 제스처로 봐요 (라즈베리파이는 초당 약 10장이라 0.3)
 
 [wake]
 gesture = "Open_Palm"    # 손바닥 1초 → 명령 대기

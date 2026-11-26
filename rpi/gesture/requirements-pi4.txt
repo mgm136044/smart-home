@@ -1,0 +1,8 @@
+# Raspberry Pi 4 전용 (Cortex-A72)
+# mediapipe 0.10.30 이후 ARM 설치판은 Raspberry Pi 5 이상용이라 Pi 4에서 "Illegal instruction"으로 죽어요.
+# 0.10.18은 Pi 4에서 동작 확인(2026-11-26), 대신 Python 3.12 이하가 필요해요.
+#   uv python install 3.12 && uv venv -p 3.12 .venv && uv pip install -p .venv/bin/python -r gesture/requirements-pi4.txt
+mediapipe==0.10.18
+numpy<2
+opencv-python<4.12
+requests>=2.31

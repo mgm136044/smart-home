@@ -20,5 +20,9 @@
 
   // 명령 응답(ACK) 대기 시간과 재시도 횟수
   "CommandTimeoutMs": 2000,
-  "CommandRetries": 1
+  "CommandRetries": 1,
+
+  // 라즈베리파이 제스처 카메라 미리보기 (gesture_app.py --preview-port 8080).
+  // 노트북 랜선 직결 + 인터넷 연결 공유면 보통 192.168.137.x 주소예요. 비우면 카메라 칸이 숨겨져요
+  "CameraUrl": "http://192.168.137.44:8080"
 }

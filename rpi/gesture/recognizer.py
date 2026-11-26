@@ -55,6 +55,24 @@ def ensure_model(path: str | Path) -> Path:
     return path
 
 
+def decide_label(canned: str, score: float, fingers: int, min_score: float) -> str | None:
+    """상태머신에 넣을 최종 제스처 이름.
+
+    라즈베리파이 실측(11/26)에서 손바닥 점수가 0.5~0.66으로 낮게 나와서 깨우기가 자꼬 끊겼고,
+    모델이 손바닥이라고 했는데도 손가락 하나가 덜 펴져 'Three_Fingers'로 덮어쓰는 일이 있었어요.
+      1) 엄지 제외 손가락 4개가 다 펴져 있으면 점수와 상관없이 Open_Palm
+      2) 손가락 3개는 모델이 Open_Palm이라고 하지 않을 때만 Three_Fingers
+      3) 나머지는 기본 분류 결과를 점수 기준(min_score) 이상일 때만 써요
+    """
+    if fingers == 4:
+        return "Open_Palm"
+    if fingers == 3 and canned != "Open_Palm":
+        return "Three_Fingers"
+    if canned in CANNED and score >= min_score:
+        return canned
+    return None
+
+
 def count_fingers(points: list[tuple[float, float]], aspect: float = 1.0) -> int:
     """엄지를 뺀 펴진 손가락 수. 손목에서 끝마디가 가운데 마디보다 충분히 멀면 펴진 것으로 봐요.
     손이 기울어져도 동작하게 '거리'로 판단해요. aspect = 화면 가로/세로 비율."""
@@ -98,12 +116,7 @@ class GestureReader:
         h, w = rgb.shape[:2]
         fingers = count_fingers(points, aspect=w / h if h else 1.0)
 
-        if fingers == 3:
-            label = "Three_Fingers"  # 기본 분류에는 없는 모양이라 직접 판단해요
-        elif canned in CANNED and score >= self.min_score:
-            label = canned
-        else:
-            label = None
+        label = decide_label(canned, score, fingers, self.min_score)
         return HandReading(label, canned, score, fingers, hand, points)
 
     def close(self) -> None:

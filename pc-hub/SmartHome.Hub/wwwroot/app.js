@@ -241,6 +241,29 @@ async function init() {
   connect();
 }
 
+// ───────── 제스처 카메라 (라즈베리파이 미리보기를 허브가 전달) ─────────
+
+async function initCamera() {
+  try {
+    const cam = await fetch('/api/camera').then((r) => r.json());
+    if (!cam.enabled) return; // 설정에 CameraUrl이 없으면 칸을 숨겨요
+  } catch {
+    return;
+  }
+  $('#cameraPanel').hidden = false;
+  const img = $('#cameraImg'), msg = $('#cameraMsg'), state = $('#cameraState');
+  const start = () => { img.src = `/camera/stream?t=${Date.now()}`; };
+  img.onload = () => { msg.hidden = true; state.textContent = '실시간'; };
+  img.onerror = () => {
+    msg.hidden = false;
+    msg.textContent = '카메라 연결 안 됨 · 라즈베리파이 제스처 앱(--preview-port 8080)이 켜져 있는지 확인하세요';
+    state.textContent = '다시 연결 중';
+    setTimeout(start, 3000);
+  };
+  start();
+}
+
 new ResizeObserver(() => drawChart()).observe($('#chart'));
+initCamera();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawChart);
 init();
