@@ -11,11 +11,13 @@
 오작동 방지
     - 같은 제스처가 정해진 시간 이상 이어져야 실행
     - 한 번 실행한 제스처는 손 모양을 바꿔야 다시 실행 (계속 들고 있어도 한 번만)
-    - 인식이 아주 잠깐(0.2초 이하) 끊기는 건 같은 제스처로 봐요
+    - 인식이 아주 잠깐(dropout_s 이하) 끊기거나 다른 이름이 끼어드는 건 같은 제스처로 봐요
+      (라즈베리파이 실측: 손바닥을 들고 있어도 손가락 수가 4↔3으로 흔들려 이름이 잠깐씩 바뀜)
 """
 
 from __future__ import annotations
 
+from collections import Counter, deque
 from dataclasses import dataclass
 from enum import Enum
 
@@ -91,6 +93,9 @@ class GestureStateMachine:
         self._cand_start = 0.0
         self._cand_last = 0.0
         self._fired = False
+        self._history: deque[tuple[float, str | None]] = deque()  # 다수결용 최근 인식 이름
+        self._stable: str | None = None
+        self._stable_since = 0.0
 
     # ───────── 외부에서 보는 값 ─────────
 
@@ -113,8 +118,8 @@ class GestureStateMachine:
     # ───────── 프레임마다 호출 ─────────
 
     def update(self, label: str | None, now: float) -> list[Action]:
-        label = label if label and label != "None" else None
-        held = self._track(label, now)
+        label = self._smooth(label if label and label != "None" else None, now)
+        held = self._track(label, now, self._stable_since)
 
         if self.mode is Mode.COOLDOWN:
             if now - self._mode_since >= self.t.cooldown_s:
@@ -166,7 +171,20 @@ class GestureStateMachine:
         self.mode = mode
         self._mode_since = now
 
-    def _track(self, label: str | None, now: float) -> float:
+    def _smooth(self, label: str | None, now: float) -> str | None:
+        """최근 dropout_s 동안 나온 이름 중 과반인 것을 지금 제스처로 봐요 (동점이면 이전 값 유지).
+        한두 프레임씩 끼어드는 다른 이름이나 인식 끊김을 걸러줘요."""
+        self._history.append((now, label))
+        while self._history and now - self._history[0][0] > self.t.dropout_s:
+            self._history.popleft()
+        top, count = Counter(l for _, l in self._history).most_common(1)[0]
+        if count * 2 > len(self._history) and top != self._stable:
+            self._stable = top
+            # 다수결은 몇 프레임 늦게 알아차리니까, 유지 시간은 창 안에서 처음 보인 때부터 세요
+            self._stable_since = next(t for t, l in self._history if l == top)
+        return self._stable
+
+    def _track(self, label: str | None, now: float, since: float) -> float:
         """지금 제스처를 몇 초째 유지하고 있는지"""
         if label is None:
             if self._cand is not None and now - self._cand_last > self.t.dropout_s:
@@ -175,7 +193,7 @@ class GestureStateMachine:
             return 0.0
         if label != self._cand:
             self._cand = label
-            self._cand_start = now
+            self._cand_start = min(since, now)
             self._fired = False
         self._cand_last = now
         return now - self._cand_start

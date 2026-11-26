@@ -97,6 +97,19 @@ class StateMachineTest(unittest.TestCase):
         self.assertEqual(self.sm.mode, Mode.ARMED)
         self.assertTrue(any(a.kind == "mode" for a in acts))
 
+    def test_palm_with_finger_count_flicker_still_wakes(self):
+        # 라즈베리파이 실측처럼 손바닥 사이사이 한 프레임씩 Three_Fingers가 끼어들어도 깨우기가 돼야 해요
+        seq = []
+        for _ in range(6):
+            seq += [("Open_Palm", 3 / FPS), ("Three_Fingers", 1 / FPS)]
+        self.r.run(*seq)
+        self.assertEqual(self.sm.mode, Mode.ARMED)
+
+    def test_flicker_does_not_trigger_other_command(self):
+        # 명령 대기 중 엄지 위를 들고 있을 때 한 프레임 주먹이 끼어들어도 커튼이 닫히면 안 돼요
+        acts = self.r.run(("Open_Palm", 1.2), ("Thumb_Up", 0.2), ("Closed_Fist", 1 / FPS), ("Thumb_Up", 0.5))
+        self.assertEqual(commands(acts), [("light", "on", None)])
+
     def test_briefing_action(self):
         acts = self.r.run(("Open_Palm", 1.2), ("ILoveYou", 0.7))
         self.assertEqual([a.kind for a in acts], ["mode", "briefing"])
