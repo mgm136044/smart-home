@@ -7,6 +7,8 @@
     python gesture_app.py --hub http://192.168.0.10:5000
     python gesture_app.py --image a.jpg b.jpg  사진으로 인식 결과만 확인
     python gesture_app.py --video clip.mp4     녹화 영상으로 전체 흐름 시험
+    python gesture_app.py --no-window --preview-port 8080 --verbose
+                                               라즈베리파이: 브라우저 미리보기 + 인식 로그
 
 사용법 (기본 설정)
     손바닥 1초 → 명령 대기(5초)
@@ -26,6 +28,7 @@ from pathlib import Path
 import cv2
 
 from hub_client import HubClient
+from preview import PreviewServer
 from recognizer import HAND_CONNECTIONS, GestureReader, HandReading
 from state_machine import Action, GestureStateMachine, Mode, Timing
 
@@ -171,6 +174,25 @@ def draw(frame, reading: HandReading | None, sm: GestureStateMachine, now: float
         cv2.putText(frame, status.text, (10, 80), FONT, 0.6, (60, 60, 255) if status.bad else (90, 220, 90), 2)
 
 
+class ReadingLogger:
+    """인식 결과가 바뀔 때만 한 줄씩 출력 (--verbose). 인식 점수/손가락 수 조정에 써요."""
+
+    def __init__(self) -> None:
+        self._last: tuple | None = None
+
+    def log(self, reading: HandReading | None, sm: GestureStateMachine) -> None:
+        key = (reading.label, reading.canned, reading.fingers) if reading else None
+        if key == self._last:
+            return
+        self._last = key
+        stamp = time.strftime("%H:%M:%S")
+        if reading is None:
+            print(f"[{stamp}] 손 없음  ({sm.mode.value})")
+        else:
+            print(f"[{stamp}] label={reading.label} canned={reading.canned} score={reading.score:.2f} "
+                  f"fingers={reading.fingers} hand={reading.handedness}  ({sm.mode.value})")
+
+
 class FpsMeter:
     def __init__(self) -> None:
         self.value = 0.0
@@ -213,6 +235,8 @@ def run_live(args: argparse.Namespace, cfg: dict) -> None:
     sm = build_state_machine(cfg)
     cam = cfg.get("camera", {})
 
+    if args.camera is not None:
+        cam = {**cam, "index": args.camera}
     if args.video:
         cap = cv2.VideoCapture(args.video)
         video_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -229,8 +253,13 @@ def run_live(args: argparse.Namespace, cfg: dict) -> None:
         print(f"허브 {hub_url}: " + ("연결됨 · " + str(state.get("link")) if state else "응답 없음 (명령은 실패로 표시돼요)"))
     print(f"설정: {cfg['_path']}  ·  손바닥 1초 → 명령 대기  ·  종료: q/ESC 또는 Ctrl+C")
 
+    preview = PreviewServer(args.preview_port) if args.preview_port else None
+    if preview:
+        print(f"미리보기: http://<이 기기 IP>:{args.preview_port}")
+    logger = ReadingLogger() if args.verbose else None
     status, fps = Status(), FpsMeter()
     start, frame_index, last_ts = time.monotonic(), 0, -1
+    last_fps_print = time.monotonic()
     try:
         while True:
             ok, frame = cap.read()
@@ -248,21 +277,32 @@ def run_live(args: argparse.Namespace, cfg: dict) -> None:
             last_ts = ts
 
             reading = reader.read(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), ts)
+            if logger:
+                logger.log(reading, sm)
             for action in sm.update(reading.label if reading else None, now):
                 handle(action, hub, status)
             fps.tick()
 
-            if not args.no_window:
+            if args.no_window and time.monotonic() - last_fps_print >= 10:
+                last_fps_print = time.monotonic()
+                print(f"[{time.strftime('%H:%M:%S')}] {fps.value:.1f} fps")
+
+            if not args.no_window or preview:
                 draw(frame, reading, sm, now, status, fps.value)
-                cv2.imshow("SmartHome Gesture", frame)
-                if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
-                    break
+                if preview:
+                    preview.update(frame)
+                if not args.no_window:
+                    cv2.imshow("SmartHome Gesture", frame)
+                    if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
+                        break
     except KeyboardInterrupt:
         pass
     finally:
         cap.release()
         reader.close()
         hub.close()  # 보내는 중인 명령은 끝까지 보내요
+        if preview:
+            preview.close()
         if not args.no_window:
             cv2.destroyAllWindows()
 
@@ -276,6 +316,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--dry-run", action="store_true", help="허브로 보내지 않고 출력만")
     p.add_argument("--image", nargs="+", help="사진으로 인식 결과만 확인")
     p.add_argument("--video", help="카메라 대신 영상 파일")
+    p.add_argument("--camera", type=int, help="카메라 번호 (설정보다 우선)")
+    p.add_argument("--preview-port", type=int, help="브라우저 미리보기 포트 (예: 8080)")
+    p.add_argument("--verbose", action="store_true", help="인식 결과가 바뀔 때마다 출력")
     args = p.parse_args(argv)
 
     cfg = load_config(args.config)
