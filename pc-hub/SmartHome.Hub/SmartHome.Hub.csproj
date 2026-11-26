@@ -26,4 +26,11 @@
     <None Update="hubsettings.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Visual Studio에서 MainForm.cs를 더블클릭하면 디자이너가 열리게 -->
+  <ItemGroup>
+    <Compile Update="UI\MainForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+  </ItemGroup>
+
 </Project>

@@ -92,6 +92,17 @@ New-NetFirewallRule -DisplayName "SmartHome Hub" -Direction Inbound -Protocol TC
 
 개인 설정은 `hubsettings.local.json`으로 복사해서 쓰면 깃에 안 올라가요(.gitignore).
 
+## WinForms 화면 꾸미기 (팀원용)
+
+1. Visual Studio에서 `SmartHome.slnx` 열기 → 솔루션 탐색기에서 `pc-hub/SmartHome.Hub/UI/MainForm.cs` 더블클릭하면 디자이너가 열려요.
+2. 배치, 글꼴, 색, 크기, 배경은 디자이너에서 마음대로 바꿔도 돼요 (`MainForm.Designer.cs`가 자동으로 바뀌어요).
+3. **컨트롤 이름(Name)만은 바꾸지 마세요.** 코드가 이름으로 써요:
+   `lblLink`, `chkFake`, `lblStatus`, `lblUrls`, `lblFanState`, `lblLightState`, `lblCurtainState`, `lblDoorState`,
+   `trkCurtain`, `lblTemp`, `lblHum`, `lblLux`, `lblIr`, `formsPlot`, `lstLog`, `btn`으로 시작하는 버튼들
+4. 켜짐/꺼짐, 연결/오프라인처럼 **상태에 따라 바뀌는 색**은 `UI/Theme.cs`에서 바꿔요 (디자이너에서 정한 글자색을 코드가 덮어써요).
+5. 버튼을 새로 넣거나 동작을 바꾸려면 `MainForm.cs`의 `btn..._Click` 함수를 참고하세요.
+6. 바꾼 뒤 F5로 실행해서 버튼이 동작하는지 확인하고 커밋해 주세요. 하드웨어 없이도 가상 장치로 동작해요.
+
 ## 펌웨어 업로드
 
 Arduino IDE 또는 arduino-cli. 라이브러리: WiFiManager(tzapu 2.x), Stepper, DHT sensor library, Adafruit Unified Sensor, Servo
